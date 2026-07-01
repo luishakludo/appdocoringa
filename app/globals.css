@@ -1,0 +1,898 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  /* Premium dark cinematic palette */
+  --background: #080808;
+  --foreground: #ffffff;
+
+  --surface: #121212;
+  --surface-elevated: #1a1a1a;
+
+  --card: #121212;
+  --card-foreground: #ffffff;
+
+  --popover: #121212;
+  --popover-foreground: #ffffff;
+
+  --primary: #d90429;
+  --primary-foreground: #ffffff;
+
+  --secondary: #1a1a1a;
+  --secondary-foreground: #ffffff;
+
+  --muted: #1a1a1a;
+  --muted-foreground: rgba(255, 255, 255, 0.55);
+
+  --accent: #8b0000;
+  --accent-foreground: #ffffff;
+
+  --destructive: #d90429;
+  --destructive-foreground: #ffffff;
+
+  --border: rgba(255, 255, 255, 0.08);
+  --input: rgba(255, 255, 255, 0.06);
+  --ring: rgba(217, 4, 41, 0.5);
+
+  --radius: 1.25rem;
+}
+
+@theme inline {
+  --font-sans: var(--font-inter), system-ui, sans-serif;
+  --font-display: var(--font-space-grotesk), system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), monospace;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --radius-sm: calc(var(--radius) - 8px);
+  --radius-md: calc(var(--radius) - 4px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 8px);
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: "ss01", "cv01";
+  }
+  html {
+    background: var(--background);
+  }
+}
+
+/* === LIQUID GLASS === */
+.liquid-glass {
+  position: relative;
+  isolation: isolate;
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.12),
+    inset 0 -1px 0 0 rgba(0, 0, 0, 0.3),
+    0 20px 60px -20px rgba(0, 0, 0, 0.6);
+}
+
+/* Card shell.
+   IMPORTANT: background must be TRANSPARENT so child elements with
+   backdrop-filter can sample the actual page background (PrismaticBurst).
+   If the card has any opaque background, it blocks the blur sampling. */
+.liquid-glass-strong {
+  position: relative;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.15),
+    inset 0 -1px 0 0 rgba(0, 0, 0, 0.4),
+    0 30px 80px -20px rgba(0, 0, 0, 0.7),
+    0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+/* Curved specular highlight at the top of the card, like light hitting
+   a piece of polished glass. Uses plain alpha (no mix-blend-mode) so it
+   doesn't force a new stacking context that would break backdrop-filter. */
+.liquid-glass-strong::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    radial-gradient(
+      ellipse 90% 60% at 30% 0%,
+      rgba(255, 255, 255, 0.18) 0%,
+      rgba(255, 255, 255, 0.06) 30%,
+      transparent 65%
+    ),
+    linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.08) 0%,
+      transparent 35%,
+      transparent 65%,
+      rgba(255, 255, 255, 0.04) 100%
+    );
+  pointer-events: none;
+  opacity: 0.9;
+}
+
+/* === PROGRESSIVE GRADIENT BLUR ===
+   Stacked layers, each with a radial mask centered on the form.
+   The masks overlap so the blur intensity grows toward the center
+   (where the inputs sit) and fades out smoothly toward the edges.
+   No solid background — we keep it fully transparent so the
+   prismatic backdrop bleeds through with real distortion. */
+.pb-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  /* z-index: 1 makes sure the blur layers paint ABOVE the card's
+     ::after highlight overlay (which has no z-index and would
+     otherwise paint over them since it comes later in the DOM). */
+  z-index: 1;
+}
+
+.pb-soft {
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  -webkit-mask-image: radial-gradient(
+    ellipse 120% 140% at 50% 50%,
+    black 0%,
+    black 80%,
+    transparent 100%
+  );
+  mask-image: radial-gradient(
+    ellipse 120% 140% at 50% 50%,
+    black 0%,
+    black 80%,
+    transparent 100%
+  );
+}
+
+.pb-medium {
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  -webkit-mask-image: radial-gradient(
+    ellipse 90% 115% at 50% 50%,
+    black 0%,
+    black 65%,
+    transparent 100%
+  );
+  mask-image: radial-gradient(
+    ellipse 90% 115% at 50% 50%,
+    black 0%,
+    black 65%,
+    transparent 100%
+  );
+}
+
+.pb-strong {
+  backdrop-filter: blur(48px) saturate(180%);
+  -webkit-backdrop-filter: blur(48px) saturate(180%);
+  -webkit-mask-image: radial-gradient(
+    ellipse 70% 100% at 50% 50%,
+    black 0%,
+    black 55%,
+    transparent 100%
+  );
+  mask-image: radial-gradient(
+    ellipse 70% 100% at 50% 50%,
+    black 0%,
+    black 55%,
+    transparent 100%
+  );
+}
+
+/* === CLAYMORPHIC INPUT with REAL BACKDROP BLUR ===
+   The key is: very transparent background + strong backdrop-filter.
+   The element must be on its own compositor layer for the blur to work. */
+.clay-input {
+  /* Translucent dark fill so the real backdrop-filter blur stays visible
+     while still giving the inputs contrast against the red/black background. */
+  background: rgba(18, 18, 18, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 4px 16px rgba(0, 0, 0, 0.2);
+  /* REAL BLUR - this blurs whatever is behind the element */
+  -webkit-backdrop-filter: blur(28px) saturate(150%);
+  backdrop-filter: blur(28px) saturate(150%);
+  /* Force GPU layer so backdrop-filter actually samples the background */
+  transform: translateZ(0);
+  will-change: backdrop-filter;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.clay-input:focus-within {
+  border-color: rgba(217, 4, 41, 0.5);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 0 0 4px rgba(217, 4, 41, 0.15);
+}
+
+/* === CLAY + SKEUO TOGGLE CHIP (amount / timeframe / steppers) ===
+   Puffy "clay" pieces: rounded, soft top highlight + deep bottom shadow so
+   each chip reads like a moulded button you can press. */
+.clay-chip {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(165deg, #242424 0%, #181818 45%, #0e0e0e 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--muted-foreground);
+  box-shadow:
+    inset 0 2px 1px rgba(255, 255, 255, 0.12),
+    inset 0 -3px 6px rgba(0, 0, 0, 0.6),
+    0 4px 10px -2px rgba(0, 0, 0, 0.55),
+    0 8px 20px -8px rgba(0, 0, 0, 0.6);
+  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease, border-color 0.25s ease, color 0.2s ease, background 0.25s ease;
+}
+/* Glossy top-light sheen baked into every chip */
+.clay-chip::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0) 55%);
+  pointer-events: none;
+}
+.clay-chip:hover:not(.is-active):not(.is-active-solid) {
+  color: var(--foreground);
+  border-color: rgba(255, 255, 255, 0.15);
+  transform: translateY(-2px);
+  box-shadow:
+    inset 0 2px 1px rgba(255, 255, 255, 0.14),
+    inset 0 -3px 6px rgba(0, 0, 0, 0.6),
+    0 6px 14px -2px rgba(0, 0, 0, 0.6),
+    0 12px 26px -8px rgba(0, 0, 0, 0.7);
+}
+.clay-chip:active {
+  transform: translateY(1px) scale(0.98);
+  box-shadow:
+    inset 0 3px 7px rgba(0, 0, 0, 0.65),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 1px 2px rgba(0, 0, 0, 0.4);
+}
+/* Selected: soft red clay with glowing rim */
+.clay-chip.is-active {
+  background: linear-gradient(165deg, rgba(240, 20, 64, 0.4) 0%, rgba(168, 4, 31, 0.42) 50%, rgba(110, 2, 22, 0.4) 100%);
+  border-color: rgba(255, 110, 130, 0.6);
+  color: #ff7187;
+  text-shadow: 0 1px 8px rgba(217, 4, 41, 0.55);
+  box-shadow:
+    inset 0 2px 1px rgba(255, 255, 255, 0.28),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.4),
+    0 0 0 1px rgba(217, 4, 41, 0.4),
+    0 4px 16px -2px rgba(217, 4, 41, 0.55),
+    0 0 22px -4px rgba(217, 4, 41, 0.5);
+}
+/* Solid red clay variant (timeframe selected) */
+.clay-chip.is-active-solid {
+  background: linear-gradient(180deg, #ff1846 0%, #c40427 55%, #960320 100%);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: var(--primary-foreground);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  box-shadow:
+    inset 0 2px 1px rgba(255, 255, 255, 0.4),
+    inset 0 -3px 6px rgba(0, 0, 0, 0.35),
+    0 5px 16px -2px rgba(217, 4, 41, 0.6),
+    0 2px 4px rgba(0, 0, 0, 0.35),
+    0 0 24px -6px rgba(217, 4, 41, 0.55);
+}
+/* Amber clay variant (reentry +) */
+.clay-chip.is-amber {
+  background: linear-gradient(180deg, rgba(251, 191, 36, 0.92) 0%, rgba(217, 152, 8, 0.95) 100%);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: #1a1408;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.2),
+    0 4px 14px -2px rgba(251, 191, 36, 0.4);
+}
+
+/* === METRIC HERO (bloco "PIX Aprovado" em destaque) === */
+.metric-hero {
+  background: linear-gradient(165deg, #ff1846 0%, #c40427 55%, #960320 100%);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow:
+    inset 0 2px 1px rgba(255, 255, 255, 0.4),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.35),
+    0 6px 20px -4px rgba(217, 4, 41, 0.55),
+    0 0 28px -6px rgba(217, 4, 41, 0.5);
+}
+.metric-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0) 55%);
+  pointer-events: none;
+}
+
+/* === SKEUOMORPHIC CARD === */
+.skeuo-card {
+  background: linear-gradient(145deg, #161616 0%, #0d0d0d 100%);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 1px 2px rgba(0, 0, 0, 0.4),
+    0 8px 24px -8px rgba(0, 0, 0, 0.6);
+}
+
+/* Deep skeuomorphic card - more depth */
+.skeuo-card-deep {
+  background: linear-gradient(145deg, #141414 0%, #0a0a0a 100%);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.5),
+    0 2px 4px rgba(0, 0, 0, 0.4),
+    0 8px 32px -8px rgba(0, 0, 0, 0.7);
+}
+
+/* Inset skeuomorphic card */
+.skeuo-card-inset {
+  background: linear-gradient(145deg, #0a0a0a 0%, #0d0d0d 100%);
+  border: 1px solid rgba(0, 0, 0, 0.4);
+  box-shadow:
+    inset 0 2px 8px rgba(0, 0, 0, 0.5),
+    inset 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+/* Skeuomorphic input */
+.skeuo-input {
+  background: linear-gradient(145deg, #0a0a0a 0%, #0d0d0d 100%);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow:
+    inset 0 2px 4px rgba(0, 0, 0, 0.4),
+    inset 0 1px 2px rgba(0, 0, 0, 0.2);
+  transition: all 0.2s ease;
+}
+
+.skeuo-input:focus {
+  outline: none;
+  border-color: rgba(217, 4, 41, 0.4);
+  box-shadow:
+    inset 0 2px 4px rgba(0, 0, 0, 0.4),
+    0 0 0 3px rgba(217, 4, 41, 0.15);
+}
+
+/* Skeuomorphic primary button */
+.skeuo-button-primary {
+  background: linear-gradient(180deg, #e30b32 0%, #a8021f 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.3),
+    0 4px 12px -2px rgba(217, 4, 41, 0.5),
+    0 2px 4px rgba(0, 0, 0, 0.3);
+  transition: all 0.2s ease;
+}
+
+.skeuo-button-primary:hover {
+  background: linear-gradient(180deg, #f01040 0%, #b8022a 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.3),
+    0 6px 16px -2px rgba(217, 4, 41, 0.6),
+    0 2px 4px rgba(0, 0, 0, 0.3);
+  transform: translateY(-1px);
+}
+
+.skeuo-button-primary:active {
+  transform: translateY(0);
+  box-shadow:
+    inset 0 2px 4px rgba(0, 0, 0, 0.3),
+    0 2px 8px -2px rgba(217, 4, 41, 0.4);
+}
+
+/* Skeuomorphic secondary button */
+.skeuo-button-secondary {
+  background: linear-gradient(145deg, #1a1a1a 0%, #111111 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.3),
+    0 2px 8px -2px rgba(0, 0, 0, 0.5);
+  transition: all 0.2s ease;
+}
+
+.skeuo-button-secondary:hover {
+  background: linear-gradient(145deg, #1f1f1f 0%, #151515 100%);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+/* Gold button for VIP */
+.skeuo-button-gold {
+  background: linear-gradient(145deg, #2a2010 0%, #1a1408 100%);
+  border: 1px solid rgba(251, 191, 36, 0.2);
+  box-shadow:
+    inset 0 1px 0 rgba(251, 191, 36, 0.15),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.4),
+    0 4px 16px -4px rgba(251, 191, 36, 0.3);
+}
+
+/* Blue button for support */
+.skeuo-button-blue {
+  background: linear-gradient(145deg, #0f1a2a 0%, #0a1018 100%);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  box-shadow:
+    inset 0 1px 0 rgba(59, 130, 246, 0.15),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.4),
+    0 4px 16px -4px rgba(59, 130, 246, 0.3);
+}
+
+/* Icon container */
+.skeuo-icon-container {
+  background: linear-gradient(145deg, #141414 0%, #0a0a0a 100%);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* Status indicator */
+.skeuo-status-online {
+  box-shadow:
+    0 0 8px rgba(16, 185, 129, 0.6),
+    0 0 16px rgba(16, 185, 129, 0.3);
+}
+
+/* Badge */
+.skeuo-badge {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.15),
+    0 2px 8px -2px rgba(217, 4, 41, 0.5);
+}
+
+/* Bottom navigation skeuomorphic */
+.skeuo-nav {
+  background: linear-gradient(180deg, #161616 0%, #0d0d0d 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 -4px 24px -4px rgba(0, 0, 0, 0.5),
+    0 8px 32px -8px rgba(0, 0, 0, 0.8);
+}
+
+.skeuo-nav-item {
+  transition: all 0.2s ease;
+}
+
+.skeuo-nav-item.active {
+  background: linear-gradient(180deg, rgba(217, 4, 41, 0.15) 0%, rgba(217, 4, 41, 0.05) 100%);
+  border-radius: 12px;
+}
+
+.skeuo-nav-indicator {
+  background: linear-gradient(180deg, #e30b32 0%, #a8021f 100%);
+  box-shadow:
+    0 0 12px rgba(217, 4, 41, 0.6),
+    0 0 24px rgba(217, 4, 41, 0.3);
+}
+
+/* === BOTTOM NAV DOCK — skeuomorphism + claymorphism (clay+skeuo) === */
+.nav-dock {
+  position: relative;
+  background: linear-gradient(180deg, #1d1d1d 0%, #111 55%, #0b0b0b 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.10),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.6),
+    0 -6px 22px -8px rgba(0, 0, 0, 0.45),
+    0 14px 34px -10px rgba(0, 0, 0, 0.85);
+}
+/* glossy top sheen baked into the dock */
+.nav-dock::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0) 45%);
+  pointer-events: none;
+}
+
+/* Each tab — puffy clay piece */
+.nav-pill {
+  position: relative;
+  isolation: isolate;
+  color: var(--muted-foreground);
+  transition:
+    transform 0.32s cubic-bezier(0.34, 1.56, 0.64, 1),
+    color 0.25s ease,
+    box-shadow 0.3s ease,
+    background 0.3s ease;
+}
+.nav-pill:hover:not(.nav-pill-active) {
+  color: var(--foreground);
+  transform: translateY(-2px);
+}
+.nav-pill:active {
+  transform: translateY(1px) scale(0.96);
+}
+.nav-pill .nav-icon {
+  transition: transform 0.32s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.nav-pill:hover:not(.nav-pill-active) .nav-icon {
+  transform: translateY(-1px) scale(1.14);
+}
+
+/* Active tab — moulded red clay pill with glossy rim */
+.nav-pill-active {
+  color: var(--primary-foreground);
+  background: linear-gradient(180deg, #ff2347 0%, #cf0628 52%, #9c0420 100%);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  box-shadow:
+    inset 0 2px 1px rgba(255, 255, 255, 0.45),
+    inset 0 -3px 7px rgba(0, 0, 0, 0.4),
+    0 4px 14px -2px rgba(217, 4, 41, 0.6),
+    0 0 22px -5px rgba(217, 4, 41, 0.55);
+}
+.nav-pill-active::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.28) 0%, rgba(255, 255, 255, 0) 55%);
+  pointer-events: none;
+  z-index: -1;
+}
+.nav-pill-active .nav-icon {
+  animation: nav-pop 0.42s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes nav-pop {
+  0% { transform: scale(0.55); }
+  60% { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+
+/* === SEGMENTED CONTROL — reusable clay+skeuo toggle (Operar / Histórico) === */
+.clay-segment {
+  position: relative;
+  background: linear-gradient(180deg, #1b1b1b 0%, #0f0f0f 60%, #0a0a0a 100%);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -3px 7px rgba(0, 0, 0, 0.55),
+    0 8px 22px -12px rgba(0, 0, 0, 0.8);
+}
+.clay-seg-btn {
+  position: relative;
+  isolation: isolate;
+  color: var(--muted-foreground);
+  transition:
+    transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1),
+    color 0.25s ease,
+    box-shadow 0.3s ease,
+    background 0.3s ease;
+}
+.clay-seg-btn:hover:not(.clay-seg-active) {
+  color: var(--foreground);
+  transform: translateY(-1px);
+}
+.clay-seg-btn:active {
+  transform: translateY(1px) scale(0.98);
+}
+.clay-seg-active {
+  color: var(--primary-foreground);
+  background: linear-gradient(180deg, #ff2347 0%, #cf0628 52%, #9c0420 100%);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  box-shadow:
+    inset 0 2px 1px rgba(255, 255, 255, 0.45),
+    inset 0 -3px 7px rgba(0, 0, 0, 0.4),
+    0 4px 14px -2px rgba(217, 4, 41, 0.55),
+    0 0 20px -6px rgba(217, 4, 41, 0.5);
+}
+.clay-seg-active::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.26) 0%, rgba(255, 255, 255, 0) 55%);
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* === CLAY CARD — reusable puffy raised surface (clay+skeuo) ===
+   Same moulded, glossy finish as the Operar chips/segment so every tab
+   (Suporte / VIP / Perfil) reads as the same puffy clay material. */
+.clay-card {
+  position: relative;
+  isolation: isolate;
+  background: linear-gradient(165deg, #212121 0%, #161616 48%, #0d0d0d 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    inset 0 2px 1px rgba(255, 255, 255, 0.12),
+    inset 0 -3px 7px rgba(0, 0, 0, 0.55),
+    0 6px 16px -6px rgba(0, 0, 0, 0.6),
+    0 12px 30px -14px rgba(0, 0, 0, 0.85);
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease, border-color 0.25s ease;
+}
+/* Glossy top-light sheen baked in — sits above the fill, below the content */
+.clay-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0) 55%);
+  pointer-events: none;
+  z-index: -1;
+}
+.clay-card-interactive:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.14);
+  box-shadow:
+    inset 0 2px 1px rgba(255, 255, 255, 0.16),
+    inset 0 -3px 7px rgba(0, 0, 0, 0.55),
+    0 10px 22px -6px rgba(0, 0, 0, 0.65),
+    0 18px 36px -14px rgba(0, 0, 0, 0.9);
+}
+.clay-card-interactive:active {
+  transform: translateY(1px) scale(0.99);
+  box-shadow:
+    inset 0 3px 7px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 2px 6px rgba(0, 0, 0, 0.45);
+}
+/* selected state — red clay rim with glow, matching the active chip */
+.clay-card-active {
+  border-color: rgba(255, 110, 130, 0.55);
+  box-shadow:
+    inset 0 2px 1px rgba(255, 255, 255, 0.2),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.4),
+    0 0 0 1px rgba(217, 4, 41, 0.4),
+    0 8px 22px -6px rgba(217, 4, 41, 0.45),
+    0 0 24px -6px rgba(217, 4, 41, 0.5);
+}
+
+/* === RED ACCENT GLOW BUTTON (claymorphism + liquid) ===
+   Matches the puffy solid red clay chip (.clay-chip.is-active-solid). */
+.button-primary {
+  background: linear-gradient(180deg, #ff1846 0%, #c40427 55%, #960320 100%);
+  border: 1px solid rgba(120, 0, 16, 0.5);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  box-shadow:
+    inset 0 -3px 6px rgba(0, 0, 0, 0.35),
+    0 5px 16px -2px rgba(217, 4, 41, 0.6),
+    0 2px 4px rgba(0, 0, 0, 0.35),
+    0 0 24px -6px rgba(217, 4, 41, 0.55);
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.button-primary:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    inset 0 -3px 6px rgba(0, 0, 0, 0.35),
+    0 10px 26px -2px rgba(217, 4, 41, 0.7),
+    0 4px 10px -2px rgba(0, 0, 0, 0.45),
+    0 0 32px -6px rgba(217, 4, 41, 0.7);
+}
+
+.button-primary:active {
+  transform: translateY(1px) scale(0.99);
+  box-shadow:
+    inset 0 3px 7px rgba(0, 0, 0, 0.4),
+    0 3px 10px -2px rgba(217, 4, 41, 0.4);
+}
+
+/* === AMBIENT BACKGROUND ORBS === */
+.ambient-orb {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(80px);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* === ANIMATIONS === */
+@keyframes float {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(20px, -30px) scale(1.05); }
+}
+
+@keyframes float-slow {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(-30px, 20px) scale(1.1); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow:
+      0 0 0 0 rgba(217, 4, 41, 0.4),
+      inset 0 0 20px rgba(217, 4, 41, 0.3);
+  }
+  50% {
+    box-shadow:
+      0 0 40px 10px rgba(217, 4, 41, 0.2),
+      inset 0 0 30px rgba(217, 4, 41, 0.4);
+  }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes fade-up {
+  0% { opacity: 0; transform: translateY(12px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes ping-slow {
+  0% { transform: scale(0.92); opacity: 0.6; }
+  70%, 100% { transform: scale(1.12); opacity: 0; }
+}
+.animate-ping-slow { animation: ping-slow 2.4s cubic-bezier(0, 0, 0.2, 1) infinite; }
+@keyframes spin-slow { to { transform: rotate(360deg); } }
+.animate-spin-slow { animation: spin-slow 6s linear infinite; }
+.animate-float { animation: float 14s ease-in-out infinite; }
+.animate-float-slow { animation: float-slow 20s ease-in-out infinite; }
+.animate-pulse-glow { animation: pulse-glow 3s ease-in-out infinite; }
+  .animate-fade-up { animation: fade-up 0.7s cubic-bezier(0.4, 0, 0.2, 1) both; }
+  /* Opacity-ONLY entrance for the glass card. We must never apply a transform
+     to this element: a transform (even an identity matrix left by a filling
+     animation) turns it into a containing block, which makes its descendants'
+     backdrop-filter sample the card's transparent background instead of the
+     page's beams behind it — killing the inputs' blur entirely. */
+  @keyframes fade-in-glass {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+  .animate-fade-up-glass { animation: fade-in-glass 0.7s cubic-bezier(0.4, 0, 0.2, 1) both; }
+
+/* ===== Slide-to-confirm (Arraste para definir o stop) ===== */
+@keyframes slide-hint {
+  0%   { transform: translateX(-2px); opacity: 0.25; }
+  50%  { opacity: 0.9; }
+  100% { transform: translateX(7px); opacity: 0.25; }
+}
+.animate-slide-hint { animation: slide-hint 1.5s ease-in-out infinite; }
+
+  @keyframes thumb-breathe {
+    0%, 100% {
+      box-shadow: 0 6px 16px -6px rgba(217, 4, 41, 0.65), 0 0 0 0 rgba(217, 4, 41, 0);
+    }
+    50% {
+      box-shadow: 0 8px 22px -4px rgba(217, 4, 41, 0.9), 0 0 0 8px rgba(217, 4, 41, 0.1);
+    }
+  }
+  .animate-thumb-breathe { animation: thumb-breathe 2.4s ease-in-out infinite; }
+
+  /* Brilho ambiente que percorre o trilho */
+  @keyframes slide-ambient {
+    0%   { transform: translateX(-60%); }
+    100% { transform: translateX(220%); }
+  }
+  .slide-ambient-sheen {
+    background: linear-gradient(
+      100deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.05) 45%,
+      rgba(255, 255, 255, 0.12) 50%,
+      rgba(255, 255, 255, 0.05) 55%,
+      transparent 100%
+    );
+    width: 40%;
+    animation: slide-ambient 3.2s ease-in-out infinite;
+    transition: opacity 0.3s ease;
+  }
+
+  /* Trilho com leve profundidade (skeuomorphic) */
+  .slide-track {
+    background: linear-gradient(
+      180deg,
+      color-mix(in oklch, var(--card) 92%, black 8%),
+      color-mix(in oklch, var(--card) 70%, black 14%)
+    );
+    border: 1px solid color-mix(in oklch, var(--border) 85%, transparent);
+    box-shadow:
+      inset 0 2px 4px rgba(0, 0, 0, 0.45),
+      inset 0 -1px 1px rgba(255, 255, 255, 0.03);
+    transition:
+      border-color 0.3s ease,
+      box-shadow 0.3s ease;
+  }
+  .slide-track.is-dragging {
+    border-color: color-mix(in oklch, var(--primary) 55%, transparent);
+    box-shadow:
+      inset 0 2px 4px rgba(0, 0, 0, 0.45),
+      inset 0 -1px 1px rgba(255, 255, 255, 0.03),
+      0 0 0 1px color-mix(in oklch, var(--primary) 35%, transparent),
+      0 0 18px -2px rgba(217, 4, 41, 0.4);
+  }
+  .slide-track.is-done {
+    border-color: color-mix(in oklch, var(--primary) 70%, transparent);
+    box-shadow:
+      inset 0 1px 2px rgba(0, 0, 0, 0.3),
+      0 0 0 1px color-mix(in oklch, var(--primary) 45%, transparent),
+      0 0 26px -2px rgba(217, 4, 41, 0.5);
+  }
+
+  /* preenchimento com leve brilho na borda */
+  .slide-fill {
+    border-radius: inherit;
+    box-shadow: inset -8px 0 16px -10px rgba(217, 4, 41, 0.5);
+  }
+
+  /* Reflexo de vidro no thumb */
+  .slide-thumb { overflow: hidden; }
+  .slide-thumb-gloss {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.35) 0%,
+      rgba(255, 255, 255, 0.08) 38%,
+      transparent 60%
+    );
+    z-index: 5;
+  }
+
+/* Texto com brilho deslizante */
+.slide-text-shimmer {
+  background-image: linear-gradient(
+    100deg,
+    var(--muted-foreground) 0%,
+    var(--muted-foreground) 38%,
+    var(--foreground) 50%,
+    var(--muted-foreground) 62%,
+    var(--muted-foreground) 100%
+  );
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 3s linear infinite;
+}
+
+/* Grid pattern overlay */
+.grid-overlay {
+  background-image:
+    linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+  background-size: 56px 56px;
+}
+
+/* Hide number input arrows */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Hide scrollbar visually while keeping scroll functionality */
+.scrollbar-hide {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
+}
