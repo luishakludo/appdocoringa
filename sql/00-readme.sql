@@ -1,0 +1,11 @@
+-- ============================================
+-- SCRIPTS SQL DO PROJETO
+-- ============================================
+-- 
+-- Execute estes scripts no SQL Editor do Supabase
+-- (https://supabase.com/dashboard > SQL Editor)
+--
+-- ORDEM DE EXECUCAO:
+-- 1. 01-create-avatars-bucket.sql - Cria bucket e politicas para fotos de perfil
+--
+-- ============================================
