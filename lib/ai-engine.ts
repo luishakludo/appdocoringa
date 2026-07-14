@@ -107,10 +107,36 @@ function pickWithTypeVariety(group: TradeableSymbol[], recent: string[]): string
 //   3) Dentro do grupo escolhido, rotaciona os tipos (cripto/forex/acoes) para
 //      dar variedade e nao recomendar so cripto.
 // `recent` = codigos das ultimas operacoes (mais recente primeiro).
-export async function pickTradeableSymbol(token: string, recent: string[] = []): Promise<string> {
-  const pool = await fetchTradeableSymbols(token)
+// `opts.excludeCodes` = ativos que a corretora acabou de recusar (indisponivel);
+//   nunca sao escolhidos de novo nesta rodada.
+// `opts.forceOtc` = so considera OTC (24/7, sempre operavel). Usado como rede de
+//   seguranca depois de algumas recusas, para a IA nunca ficar "girando infinito".
+export async function pickTradeableSymbol(
+  token: string,
+  recent: string[] = [],
+  opts: { excludeCodes?: string[]; forceOtc?: boolean } = {},
+): Promise<string> {
+  const excludeSet = new Set((opts.excludeCodes ?? []).map((c) => c.toUpperCase()))
+  const otcFallback = () => {
+    const avail = OTC_SYMBOLS.filter((c) => !excludeSet.has(c.toUpperCase()))
+    const src = avail.length > 0 ? avail : OTC_SYMBOLS
+    return src[Math.floor(Math.random() * src.length)]
+  }
+
+  let pool = (await fetchTradeableSymbols(token)).filter((s) => !excludeSet.has(s.code.toUpperCase()))
+
+  // Rede de seguranca: restringe a OTC (sempre aberto). Se nao houver OTC no
+  // pool ao vivo, usa o catalogo OTC garantido.
+  if (opts.forceOtc) {
+    const otc = pool.filter((s) => s.isOtc)
+    pool =
+      otc.length > 0
+        ? otc
+        : OTC_SYMBOLS.filter((c) => !excludeSet.has(c.toUpperCase())).map((code) => ({ code, isOtc: true }))
+  }
+
   if (pool.length === 0) {
-    return OTC_SYMBOLS[Math.floor(Math.random() * OTC_SYMBOLS.length)]
+    return otcFallback()
   }
 
   // Regra 0: se a versao REAL de um ativo esta aberta, descarta a versao OTC
