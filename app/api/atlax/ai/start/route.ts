@@ -1,6 +1,13 @@
 import { NextResponse } from "next/server"
 import { supabase } from "@/lib/supabase"
-import { pickTradeableSymbol, fetchBrokerBalance, nextCandleBoundaryMs, tickSession, type AiSession } from "@/lib/ai-engine"
+import {
+  pickTradeableSymbol,
+  fetchBrokerBalance,
+  nextCandleBoundaryMs,
+  tickSession,
+  claimSession,
+  type AiSession,
+} from "@/lib/ai-engine"
 
 export const maxDuration = 60
 
@@ -90,7 +97,17 @@ export async function POST(request: Request) {
 
     // Em M1/M2 abre a primeira operacao imediatamente; em M5 o tick apenas
     // registra o agendamento e aguarda a abertura da vela (o cron assume).
-    await tickSession(session)
+    //
+    // IMPORTANTE: reivindicamos o LOCK antes de operar. Sem isso, este tick do
+    // start (que no M1/M2 ja entra no fluxo de "place" porque a vela esta a <48s)
+    // corria em paralelo com o primeiro POST /tick do cliente — que conseguia o
+    // lock porque o start nunca o setava — e AMBOS abriam uma ordem na mesma
+    // vela. Era exatamente o bug de "2 operacoes em vez de 1" no M1. Com o lock
+    // reivindicado aqui, o tick do cliente/cron bate no lock e nao duplica.
+    const claimed = await claimSession(session)
+    if (claimed) {
+      await tickSession(session)
+    }
 
     return NextResponse.json({ success: true, sessionId: session.id })
   } catch (err) {

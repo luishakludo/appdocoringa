@@ -960,6 +960,28 @@ export async function tickSession(session: AiSession): Promise<void> {
         `[v0] aguardando abertura da vela: dormindo ${decision.sleepMs}ms ate ${new Date(decision.target).toISOString()}`,
       )
       await sleep(decision.sleepMs)
+
+      // DEFESA CONTRA DUPLICIDADE: seguramos o lock durante todo o sleep, mas
+      // relemos a sessao antes de abrir a ordem para garantir que, enquanto
+      // dormiamos, ninguem ja abriu uma operacao (ou encerrou a sessao). Sem
+      // essa checagem, uma corrida no inicio da sessao chegava a abrir 2
+      // operacoes na mesma vela no M1. Se a fase mudou ou ja existe operacao
+      // ativa, abortamos e soltamos o lock.
+      const { data: fresh } = await supabase
+        .from("ai_sessions")
+        .select("phase,status,active_tx_id")
+        .eq("id", session.id)
+        .maybeSingle<{ phase: string; status: string; active_tx_id: number | null }>()
+      if (
+        !fresh ||
+        fresh.status !== "running" ||
+        fresh.active_tx_id != null ||
+        !(fresh.phase === "placing" || fresh.phase === "between")
+      ) {
+        console.log(`[v0] place abortado apos sleep (fase=${fresh?.phase}, tx=${fresh?.active_tx_id}) — evitando duplicidade`)
+        await patchSession(session.id, { tick_lock: null })
+        return
+      }
     }
     await placeNext(session)
     return
