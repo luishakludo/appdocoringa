@@ -404,6 +404,11 @@ export function TradingContent({ onGoVip }: { onGoVip?: () => void }) {
   const scheduledWait = autoActive && session?.phase === "placing" && tradeEndsMs > nowTs
   const entryRemaining = scheduledWait ? Math.max(0, Math.round((tradeEndsMs - nowTs) / 1000)) : 0
 
+  // Estado de "analise": a IA esta escolhendo/trocando de ativo (fases placing
+  // sem horario agendado ou between). Para o lead isso NUNCA aparece como erro
+  // de "ativo indisponivel" — mostramos um efeito de "IA analisando o mercado".
+  const analyzing = autoActive && !scheduledWait && !settling && autoStatus !== "running"
+
   // Atualiza o saldo em TEMPO REAL. Enquanto a IA opera, recarrega a cada 2s
   // para refletir o green/loss assim que a corretora liquida a operacao. Fora
   // de operacao, recarrega a cada 10s (cabecalho visivel).
@@ -703,12 +708,20 @@ export function TradingContent({ onGoVip }: { onGoVip?: () => void }) {
                 </div>
               )}
             </div>
-          ) : autoStatus === "between" ? (
-            <div className="mt-10 flex flex-col items-center py-10">
-              <Loader2 className="size-10 animate-spin text-primary" />
-              <p className="mt-4 text-sm text-muted-foreground text-center max-w-xs text-balance">
-                {autoError ?? "Analisando o próximo ativo..."}
+          ) : analyzing ? (
+            <div className="mt-8 flex flex-col items-center py-6">
+              <AiOrb />
+              <p className="mt-6 font-mono text-[0.6rem] uppercase tracking-[0.3em] text-primary animate-pulse">
+                IA analisando o mercado
               </p>
+              <p className="mt-2 text-xs text-muted-foreground text-center max-w-xs text-balance">
+                Escaneando os ativos disponíveis e o melhor ponto de entrada...
+              </p>
+              <div className="mt-4 flex items-center gap-1.5" aria-hidden="true">
+                <span className="size-1.5 rounded-full bg-primary/70 animate-bounce [animation-delay:-0.3s]" />
+                <span className="size-1.5 rounded-full bg-primary/70 animate-bounce [animation-delay:-0.15s]" />
+                <span className="size-1.5 rounded-full bg-primary/70 animate-bounce" />
+              </div>
             </div>
           ) : (
             <>
