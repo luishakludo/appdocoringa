@@ -74,22 +74,37 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Plano nao encontrado." }, { status: 404 })
     }
 
-    // Descobrir o admin DONO do plano (email + secret key) numa unica consulta.
+    // Descobrir o admin DONO do plano (email + secret key + modo) numa consulta.
     const ownerAdminId = plan.admin_id || adminId
     let secretKey = ""
     let ownerEmail = ""
+    let checkoutMode = "buckpay"
     if (ownerAdminId) {
       const { data: admin } = await supabase
         .from("admins")
-        .select("gateway_secret_key, email")
+        .select("gateway_secret_key, email, checkout_mode")
         .eq("id", ownerAdminId)
         .maybeSingle()
       secretKey = sanitizeKey(admin?.gateway_secret_key)
       ownerEmail = String(admin?.email ?? "").trim().toLowerCase()
+      checkoutMode = String(admin?.checkout_mode ?? "buckpay").trim().toLowerCase()
     }
 
-    // Conta especial (coringa@gmail.com): NAO gera PIX pela Buck Pay.
-    // Redireciona o comprador para o checkout externo (Cakto).
+    // Modo "external": NAO gera PIX. Redireciona o comprador para o link de
+    // checkout que o admin configurou NESTE plano (ex.: Cakto).
+    if (checkoutMode === "external") {
+      const url = String(plan.checkout_url ?? "").trim()
+      if (url) {
+        return NextResponse.json({ redirectUrl: url })
+      }
+      return NextResponse.json(
+        { error: "O checkout externo ainda nao foi configurado para este plano. Fale com o suporte." },
+        { status: 503 },
+      )
+    }
+
+    // Legado: conta coringa@gmail.com que ainda nao migrou para o modo "external".
+    // Mantem o comportamento antigo (link fixo) ate a migracao ser aplicada.
     if (ownerEmail === CORINGA_CHECKOUT.email) {
       return NextResponse.json({ redirectUrl: CORINGA_CHECKOUT.url })
     }
