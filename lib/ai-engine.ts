@@ -107,11 +107,19 @@ function pickWithTypeVariety(group: TradeableSymbol[], recent: string[]): string
 //   3) Dentro do grupo escolhido, rotaciona os tipos (cripto/forex/acoes) para
 //      dar variedade e nao recomendar so cripto.
 // `recent` = codigos das ultimas operacoes (mais recente primeiro).
-export async function pickTradeableSymbol(token: string, recent: string[] = []): Promise<string> {
-  const pool = await fetchTradeableSymbols(token)
+// Selecao PURA a partir de um pool ja carregado (sem I/O). Mesmas regras de
+// pickTradeableSymbol. Fica separada para que placeNext possa tentar VARIOS
+// ativos dentro do mesmo tick (trocando o indisponivel na hora) sem rebater o
+// endpoint da corretora a cada tentativa.
+//   `exclude` = codigos que a corretora acabou de recusar (indisponiveis) nesta
+//   rodada; sao evitados. Se excluir todos, ignoramos o exclude para nunca
+//   ficar sem opcao.
+function selectSymbol(pool: TradeableSymbol[], recent: string[] = [], exclude: string[] = []): string {
   if (pool.length === 0) {
     return OTC_SYMBOLS[Math.floor(Math.random() * OTC_SYMBOLS.length)]
   }
+
+  const excludeSet = new Set(exclude.map((c) => c.toUpperCase()))
 
   // Regra 0: se a versao REAL de um ativo esta aberta, descarta a versao OTC
   // dele. Ex.: com BTCUSDT aberto, BTCUSDTOTC nem entra no sorteio. Assim nao
@@ -119,6 +127,11 @@ export async function pickTradeableSymbol(token: string, recent: string[] = []):
   const realBases = new Set(pool.filter((s) => !s.isOtc).map((s) => baseCode(s.code)))
   let cleaned = pool.filter((s) => !(s.isOtc && realBases.has(baseCode(s.code))))
   if (cleaned.length === 0) cleaned = pool
+
+  // Regra 0.5: remove os ativos que acabaram de falhar (indisponiveis), desde
+  // que ainda sobre alguma opcao — nunca deixamos a lista vazia.
+  const notExcluded = cleaned.filter((s) => !excludeSet.has(s.code.toUpperCase()))
+  if (notExcluded.length > 0) cleaned = notExcluded
 
   // Regra 1: evita repetir o ultimo ativo (se houver alternativa).
   const last = recent[0]
@@ -144,6 +157,17 @@ export async function pickTradeableSymbol(token: string, recent: string[] = []):
   const group = useOtc ? otc : nonOtc
   // Regra 3: variedade de tipos dentro do grupo escolhido.
   return pickWithTypeVariety(group, recent)
+}
+
+// Escolhe o proximo ativo negociavel AGORA. Carrega o pool da corretora e delega
+// a selecao pura em selectSymbol. `exclude` evita ativos que ja falharam.
+export async function pickTradeableSymbol(
+  token: string,
+  recent: string[] = [],
+  exclude: string[] = [],
+): Promise<string> {
+  const pool = await fetchTradeableSymbols(token)
+  return selectSymbol(pool, recent, exclude)
 }
 
 export type AiConfig = {
@@ -482,114 +506,158 @@ function resolveBrokerExpiry(raw: string, nowMs: number, expirationMin: number):
 
 // Abre a proxima operacao. A IA escolhe moeda/direcao aleatorias, ou repete a
 // operacao pendente (reentrada) com o valor dobrado.
+// Numero maximo de ativos que tentamos abrir NO MESMO tick quando a corretora
+// recusa por "ativo indisponivel". Como cada rejeicao volta rapido, poucas
+// tentativas ja bastam para trocar por um ativo disponivel sem estourar o
+// tempo da vela.
+const MAX_PLACE_ATTEMPTS = 5
+
 async function placeNext(session: AiSession): Promise<void> {
   const cfg = session.config
   const pending = session.pending_reentry
 
-  let symbol: string
-  let direction: 0 | 1
-  let amount: number
-  let reentryCount = session.reentry_count
+  // Historico recente de ativos desta sessao (mais recente primeiro) para
+  // limitar OTC, rotacionar tipos e nao repetir o ativo anterior.
+  const { data: recentRows } = await supabase
+    .from("ai_operations")
+    .select("symbol")
+    .eq("session_id", session.id)
+    .order("id", { ascending: false })
+    .limit(RECENT_WINDOW)
+  const recent = (recentRows ?? []).map((r) => r.symbol as string)
 
-  if (pending) {
-    symbol = pending.symbol
-    direction = pending.direction
-    amount = pending.amount
-  } else {
-    // Historico recente de ativos desta sessao (mais recente primeiro) para
-    // limitar OTC a 35%, rotacionar tipos e nao repetir o ativo anterior.
-    const { data: recentRows } = await supabase
-      .from("ai_operations")
-      .select("symbol")
-      .eq("session_id", session.id)
-      .order("id", { ascending: false })
-      .limit(RECENT_WINDOW)
-    const recent = (recentRows ?? []).map((r) => r.symbol as string)
-
-    symbol = await pickTradeableSymbol(session.atlax_token, recent)
-    direction = Math.random() > 0.5 ? 1 : 0
-    amount = cfg.amount
-    reentryCount = 0
-  }
+  // Pool de ativos abertos AGORA carregado UMA vez: assim, se um estiver
+  // indisponivel, trocamos por outro no MESMO tick sem rebater a corretora.
+  const pool = await fetchTradeableSymbols(session.atlax_token)
 
   const balanceBefore = (await fetchBrokerBalance(session.atlax_token)) ?? session.balance_before
 
-  const placed = await placeBrokerTrade(session.atlax_token, symbol, direction, cfg.expiration, amount)
+  // Ativos que a corretora recusou nesta rodada — nunca repetimos.
+  const tried: string[] = []
 
-  if (!placed.success) {
+  for (let attempt = 0; attempt < MAX_PLACE_ATTEMPTS; attempt++) {
+    let symbol: string
+    let direction: 0 | 1
+    let amount: number
+    let reentryCount: number
+
+    if (pending && attempt === 0) {
+      // 1a tentativa honra exatamente o plano/gale agendado.
+      symbol = pending.symbol
+      direction = pending.direction
+      amount = pending.amount
+      reentryCount = session.reentry_count
+    } else if (pending) {
+      // O ativo planejado/gale esta indisponivel: mantem valor e direcao, mas
+      // TROCA para um ativo disponivel em vez de ficar preso no indisponivel.
+      symbol = selectSymbol(pool, recent, tried)
+      direction = pending.direction
+      amount = pending.amount
+      reentryCount = session.reentry_count
+    } else {
+      symbol = selectSymbol(pool, recent, tried)
+      direction = (Math.random() > 0.5 ? 1 : 0) as 0 | 1
+      amount = cfg.amount
+      reentryCount = 0
+    }
+
+    tried.push(symbol)
+
+    const placed = await placeBrokerTrade(session.atlax_token, symbol, direction, cfg.expiration, amount)
+
     // Token expirou: encerra a sessao com aviso.
-    if (placed.unauthorized) {
+    if (!placed.success && placed.unauthorized) {
       await finishSession(session, "error", "Sessao da corretora expirou. Inicie a IA novamente.")
       return
     }
-    // Rejeicao intermitente: descarta o ativo planejado e tenta outro no
-    // proximo tick (evita ficar preso repetindo um ativo indisponivel).
+
+    if (!placed.success) {
+      // Ativo indisponivel/rejeicao intermitente. NAO expomos isso ao lead:
+      // apenas logamos e trocamos por outro ativo disponivel imediatamente.
+      console.log(
+        `[v0] ativo ${symbol} indisponivel (${placed.message}); trocando por outro (tentativa ${attempt + 1}/${MAX_PLACE_ATTEMPTS})`,
+      )
+      continue
+    }
+
+    // Sucesso: registra a operacao no historico (resultado pendente).
+    const { data: opRow } = await supabase
+      .from("ai_operations")
+      .insert({
+        session_id: session.id,
+        atlax_user_id: session.atlax_user_id,
+        transaction_id: placed.transactionId,
+        symbol,
+        direction,
+        expiration: cfg.expiration,
+        amount,
+        status: "success",
+        result: "pending",
+        profit: 0,
+      })
+      .select("id")
+      .single()
+
+    // FONTE DA VERDADE do prazo: a expiracao REAL retornada pela corretora
+    // (`expiration_date`), ja alinhada ao fechamento da vela em que a ORDEM
+    // CAIU. So caimos no calculo local alinhado quando a corretora nao devolve
+    // um horario utilizavel.
+    const now = Date.now()
+    const stepMs = Math.max(1, Math.floor(cfg.expiration)) * 60 * 1000
+    const candleOpen = Math.floor(now / stepMs) * stepMs
+    const localEnds = candleOpen + cfg.expiration * 60 * 1000
+    let endsMs = localEnds
+    let source = "local-alinhado"
+    if (placed.expirationDate) {
+      const resolved = resolveBrokerExpiry(placed.expirationDate, now, cfg.expiration)
+      if (resolved != null) {
+        endsMs = resolved
+        source = "corretora"
+      }
+    }
+    const endsAt = new Date(endsMs).toISOString()
+    console.log(
+      `[v0] placeNext tx#${placed.transactionId} ${symbol} ${direction} expira em ${endsAt} (fonte: ${source}, raw: ${placed.expirationDate ?? "-"})`,
+    )
+
     await patchSession(session.id, {
-      phase: "between",
-      fail_streak: session.fail_streak + 1,
-      last_error: placed.message,
+      phase: "running",
+      fail_streak: 0,
+      last_error: null,
+      current_symbol: symbol,
+      current_direction: direction,
+      current_amount: amount,
+      balance_before: balanceBefore,
+      active_tx_id: placed.transactionId,
+      active_op_id: opRow?.id ?? null,
+      trade_ends_at: endsAt,
+      reentry_count: reentryCount,
       pending_reentry: null,
       tick_lock: null,
     })
     return
   }
 
-  // Registra a operacao no historico (resultado pendente).
-  const createdAt = new Date().toISOString()
-  const { data: opRow } = await supabase
-    .from("ai_operations")
-    .insert({
-      session_id: session.id,
-      atlax_user_id: session.atlax_user_id,
-      transaction_id: placed.transactionId,
-      symbol,
-      direction,
-      expiration: cfg.expiration,
-      amount,
-      status: "success",
-      result: "pending",
-      profit: 0,
-    })
-    .select("id")
-    .single()
-
-  // FONTE DA VERDADE do prazo: a expiracao REAL retornada pela corretora
-  // (`expiration_date`), que ja vem alinhada ao fechamento da vela em que a
-  // ORDEM CAIU. Isso e o que garante que o timer da IA bata exatamente com a
-  // corretora — inclusive quando a ordem entra na vela seguinte por ter sido
-  // enviada perto do fechamento da atual. So caimos no calculo local alinhado
-  // quando a corretora nao devolve um horario utilizavel.
-  const now = Date.now()
-  const stepMs = Math.max(1, Math.floor(cfg.expiration)) * 60 * 1000
-  const candleOpen = Math.floor(now / stepMs) * stepMs
-  const localEnds = candleOpen + cfg.expiration * 60 * 1000
-  let endsMs = localEnds
-  let source = "local-alinhado"
-  if (placed.expirationDate) {
-    const resolved = resolveBrokerExpiry(placed.expirationDate, now, cfg.expiration)
-    if (resolved != null) {
-      endsMs = resolved
-      source = "corretora"
-    }
-  }
-  const endsAt = new Date(endsMs).toISOString()
-  console.log(
-    `[v0] placeNext tx#${placed.transactionId} ${symbol} ${direction} expira em ${endsAt} (fonte: ${source}, raw: ${placed.expirationDate ?? "-"})`,
-  )
-
+  // Esgotou as tentativas neste tick sem conseguir abrir (raro: exigiria todos
+  // os ativos — inclusive OTC 24/7 — indisponiveis ao mesmo tempo). NAO trava
+  // nem vaza erro pro lead: escolhe um ativo para a UI mostrar "IA vai entrar
+  // em..." (efeito de analise), reagenda para a proxima abertura de vela e o
+  // proximo tick tenta de novo.
+  const nextSymbol = selectSymbol(pool, recent, [])
+  const nextDirection = (Math.random() > 0.5 ? 1 : 0) as 0 | 1
+  const nextAmount = pending ? pending.amount : cfg.amount
+  const scheduledStart = new Date(nextCandleBoundaryMs(cfg.expiration)).toISOString()
   await patchSession(session.id, {
-    phase: "running",
-    fail_streak: 0,
+    phase: "placing",
+    fail_streak: session.fail_streak + 1,
     last_error: null,
-    current_symbol: symbol,
-    current_direction: direction,
-    current_amount: amount,
     balance_before: balanceBefore,
-    active_tx_id: placed.transactionId,
-    active_op_id: opRow?.id ?? null,
-    trade_ends_at: endsAt,
-    reentry_count: reentryCount,
-    pending_reentry: null,
+    current_symbol: nextSymbol,
+    current_direction: nextDirection,
+    current_amount: nextAmount,
+    trade_ends_at: scheduledStart,
+    reentry_count: pending ? session.reentry_count : 0,
+    pending_reentry: { symbol: nextSymbol, direction: nextDirection, amount: nextAmount },
     tick_lock: null,
   })
 }
@@ -892,6 +960,28 @@ export async function tickSession(session: AiSession): Promise<void> {
         `[v0] aguardando abertura da vela: dormindo ${decision.sleepMs}ms ate ${new Date(decision.target).toISOString()}`,
       )
       await sleep(decision.sleepMs)
+
+      // DEFESA CONTRA DUPLICIDADE: seguramos o lock durante todo o sleep, mas
+      // relemos a sessao antes de abrir a ordem para garantir que, enquanto
+      // dormiamos, ninguem ja abriu uma operacao (ou encerrou a sessao). Sem
+      // essa checagem, uma corrida no inicio da sessao chegava a abrir 2
+      // operacoes na mesma vela no M1. Se a fase mudou ou ja existe operacao
+      // ativa, abortamos e soltamos o lock.
+      const { data: fresh } = await supabase
+        .from("ai_sessions")
+        .select("phase,status,active_tx_id")
+        .eq("id", session.id)
+        .maybeSingle<{ phase: string; status: string; active_tx_id: number | null }>()
+      if (
+        !fresh ||
+        fresh.status !== "running" ||
+        fresh.active_tx_id != null ||
+        !(fresh.phase === "placing" || fresh.phase === "between")
+      ) {
+        console.log(`[v0] place abortado apos sleep (fase=${fresh?.phase}, tx=${fresh?.active_tx_id}) — evitando duplicidade`)
+        await patchSession(session.id, { tick_lock: null })
+        return
+      }
     }
     await placeNext(session)
     return
