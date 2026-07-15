@@ -13,7 +13,6 @@ const SYMBOL_NAMES: Record<string, string> = {
   LTCUSDT: "LTC/USDT",
   AAPL: "Apple",
   NFLX: "Netflix",
-  FB: "Meta",
   TSLA: "Tesla",
 }
 

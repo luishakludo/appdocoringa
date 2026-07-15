@@ -58,7 +58,7 @@ export type AtlaxLocalTransaction = {
   amount: number // em reais
   status: string
   createdAt: string
-  result?: "green" | "loss" | "pending" | null // resultado apos expiracao
+  result?: "green" | "loss" | "draw" | "pending" | null // resultado apos expiracao (draw = empate)
   profit?: number // lucro/prejuizo em reais (apos expiracao)
 }
 
@@ -67,7 +67,7 @@ export function updateAtlaxTransactionResult(
   atlaxUserId: number,
   transactionId: number | null,
   createdAt: string,
-  patch: { result: "green" | "loss" | "pending"; profit?: number },
+  patch: { result: "green" | "loss" | "draw" | "pending"; profit?: number },
 ) {
   if (typeof window === "undefined") return
   const current = getAtlaxTransactions(atlaxUserId)

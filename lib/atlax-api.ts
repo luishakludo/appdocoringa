@@ -37,7 +37,6 @@ export const SYMBOL_CATALOG: SymbolMeta[] = [
   // ---- Acoes ----
   { code: "AAPL", name: "Apple", type: "stocks", isOtc: false, openHour: "11:30:00", closeHour: "17:59:59", blockedWeekend: true },
   { code: "NFLX", name: "Netflix", type: "stocks", isOtc: false, openHour: "11:30:00", closeHour: "17:59:59", blockedWeekend: true },
-  { code: "FB", name: "Meta", type: "stocks", isOtc: false, openHour: "11:30:00", closeHour: "17:59:59", blockedWeekend: true },
   { code: "TSLA", name: "Tesla", type: "stocks", isOtc: false, openHour: "11:30:00", closeHour: "17:59:59", blockedWeekend: true },
   // ---- OTC (24/7, inclusive fim de semana) ----
   { code: "EURUSDOTC", name: "EUR/USD (OTC)", type: "forex", isOtc: true, openHour: "00:00:00", closeHour: "23:59:59", blockedWeekend: false },
@@ -50,7 +49,6 @@ export const SYMBOL_CATALOG: SymbolMeta[] = [
   { code: "BNBUSDTOTC", name: "BNB/USDT (OTC)", type: "crypto", isOtc: true, openHour: "00:00:00", closeHour: "23:59:59", blockedWeekend: false },
   { code: "AAPLOTC", name: "Apple (OTC)", type: "stocks", isOtc: true, openHour: "00:00:00", closeHour: "23:59:59", blockedWeekend: false },
   { code: "NFLXOTC", name: "Netflix (OTC)", type: "stocks", isOtc: true, openHour: "00:00:00", closeHour: "23:59:59", blockedWeekend: false },
-  { code: "FBOTC", name: "Meta (OTC)", type: "stocks", isOtc: true, openHour: "00:00:00", closeHour: "23:59:59", blockedWeekend: false },
   { code: "TSLAOTC", name: "Tesla (OTC)", type: "stocks", isOtc: true, openHour: "00:00:00", closeHour: "23:59:59", blockedWeekend: false },
 ]
 
@@ -125,7 +123,6 @@ export const PRICE_DEFAULTS: Record<string, number> = {
   // Acoes
   AAPL: 224,
   NFLX: 817,
-  FB: 586,
   TSLA: 329,
   // OTC (espelham o ativo real)
   EURUSDOTC: 1.06,
@@ -138,6 +135,5 @@ export const PRICE_DEFAULTS: Record<string, number> = {
   BNBUSDTOTC: 625,
   AAPLOTC: 228,
   NFLXOTC: 784,
-  FBOTC: 567,
   TSLAOTC: 340,
 }

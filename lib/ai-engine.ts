@@ -332,10 +332,11 @@ async function triggerBrokerSettlement(token: string): Promise<void> {
 //   status_id 1 = Em aberto (ainda nao liquidou)
 //   status_id 2 = Ganhou (green)  -> lucro = returns - amount
 //   status_id 3 = Perdeu (loss)   -> lucro = -amount
+//   status_id 4+ = Empate/Devolvido (draw) -> lucro = 0 (aposta devolvida)
 // `expiryRaw` e a expiracao oficial da transacao ("YYYY-MM-DD HH:mm:ss" no fuso
 // da corretora), usada para SINCRONIZAR o timer da IA com o tempo real.
 type TxResult =
-  | { decided: true; result: "green" | "loss"; profit: number; expiryRaw: string | null }
+  | { decided: true; result: "green" | "loss" | "draw"; profit: number; expiryRaw: string | null }
   | { decided: false; expiryRaw: string | null }
 
 async function fetchTransactionResult(token: string, txId: number, amount: number): Promise<TxResult> {
@@ -359,10 +360,22 @@ async function fetchTransactionResult(token: string, txId: number, amount: numbe
     console.log(`[v0] fetchTransactionResult tx#${txId} status_id=${statusId} exp=${expiryRaw ?? "-"}`)
     if (statusId === 2) {
       const returns = tx?.returns_cents != null ? Number(tx.returns_cents) / 100 : brlToNumber(tx?.returns)
-      return { decided: true, result: "green", profit: returns - amount, expiryRaw }
+      const profit = returns - amount
+      // Empate marcado como "ganho" mas com retorno == aposta (lucro ~0): a
+      // corretora apenas devolveu o valor. Tratamos como EMPATE (nem win nem loss).
+      if (profit <= Math.max(0.01, amount * 0.0001)) {
+        return { decided: true, result: "draw", profit: 0, expiryRaw }
+      }
+      return { decided: true, result: "green", profit, expiryRaw }
     }
     if (statusId === 3) {
       return { decided: true, result: "loss", profit: -amount, expiryRaw }
+    }
+    // status_id 4+ = empate / aposta devolvida (draw). E um estado FINAL: a
+    // operacao liquidou sem ganho nem perda. Antes esse status caia no "ainda
+    // em aberto" e a IA ficava analisando pra sempre no empate.
+    if (statusId >= 4) {
+      return { decided: true, result: "draw", profit: 0, expiryRaw }
     }
     // status_id 1 (Em aberto) ou desconhecido: ainda nao liquidou.
     return { decided: false, expiryRaw }
@@ -697,7 +710,7 @@ async function settle(session: AiSession): Promise<void> {
   // corretora pelo id da transacao (status_id 2 = green, 3 = loss). Bem mais
   // simples e confiavel do que inferir pelo saldo. Fazemos um poll curto dentro
   // de um unico tick para captar a liquidacao assim que ela acontece.
-  let result: "green" | "loss" | null = null
+  let result: "green" | "loss" | "draw" | null = null
   let profit = 0
 
   if (session.active_tx_id != null) {
@@ -747,8 +760,18 @@ async function settle(session: AiSession): Promise<void> {
         await patchSession(session.id, { tick_lock: null })
         return
       }
-      result = finalBalance > before + tol ? "green" : "loss"
-      profit = result === "green" ? finalBalance - before : -amt
+      // saldo acima do inicial => green; saldo praticamente igual ao inicial
+      // (aposta devolvida) => EMPATE; abaixo (aposta consumida) => loss.
+      if (finalBalance > before + tol) {
+        result = "green"
+        profit = finalBalance - before
+      } else if (finalBalance >= before - tol) {
+        result = "draw"
+        profit = 0
+      } else {
+        result = "loss"
+        profit = -amt
+      }
       console.log(
         `[v0] settle tx#${session.active_tx_id} prazo esgotado -> resolvido por saldo: ${result} (profit ${profit.toFixed(2)})`,
       )
@@ -767,10 +790,15 @@ async function settle(session: AiSession): Promise<void> {
 
     const winConfirmed = finalBalance != null && finalBalance > before + tol
     const lossConfirmed = finalBalance != null && finalBalance <= lossLevel + tol
+    // Empate: aposta devolvida integralmente -> saldo volta ao nivel inicial.
+    const drawConfirmed = finalBalance != null && Math.abs(finalBalance - before) <= tol
 
     if (winConfirmed) {
       result = "green"
       profit = finalBalance - before
+    } else if (drawConfirmed && deadlinePassed) {
+      result = "draw"
+      profit = 0
     } else if (lossConfirmed && deadlinePassed) {
       result = "loss"
       profit = finalBalance != null ? finalBalance - before : -amt
