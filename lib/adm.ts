@@ -457,7 +457,7 @@ export async function findAppUserByEmail(email: string) {
 
 // Email/senha do adm padrao. Todo usuario que loga sem indicacao
 // e sem cadastro previo cai automaticamente na base deste adm.
-export const DEFAULT_BASE_ADMIN_EMAIL = "jhon@gmail.com"
+export const DEFAULT_BASE_ADMIN_EMAIL = "coringa@gmail.com"
 const DEFAULT_BASE_ADMIN_PASSWORD = "121212"
 
 // Garante que o adm padrao exista e retorna o id dele.
@@ -485,7 +485,7 @@ export async function ensureDefaultBaseAdminId() {
 // Resolve (ou cria) o vinculo do usuario logado a uma base de adm.
 // - Se o usuario ja existe na base, mantem o adm atual (vinculo travado).
 // - Senao, vincula ao adm do link de indicacao (se houver e valido).
-// - Senao, vincula ao adm padrao (base geral / jhon).
+  // - Senao, vincula ao adm padrao (base geral / coringa).
 export async function resolveUserBase(input: {
   login: string
   name?: string
