@@ -1496,6 +1496,7 @@ function MetaPill({
 
 function HistoryRow({ tx }: { tx: AtlaxLocalTransaction }) {
   const isGreen = tx.result === "green"
+  const isDraw = tx.result === "draw"
   const isPending = !tx.result || tx.result === "pending"
 
   return (
@@ -1529,6 +1530,8 @@ function HistoryRow({ tx }: { tx: AtlaxLocalTransaction }) {
         <p className="text-sm font-semibold">R$ {tx.amount.toFixed(2)}</p>
         {isPending ? (
           <p className="text-[0.6rem] uppercase tracking-wider font-mono text-muted-foreground">Em aberto</p>
+        ) : isDraw ? (
+          <p className="text-[0.6rem] uppercase tracking-wider font-mono text-muted-foreground">Empate</p>
         ) : (
           <p
             className={`text-[0.6rem] uppercase tracking-wider font-mono ${
