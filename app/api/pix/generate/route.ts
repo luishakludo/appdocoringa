@@ -3,6 +3,13 @@ import { supabase } from "@/lib/supabase"
 
 const BUCKPAY_URL = "https://api.realtechdev.com.br/v1/transactions"
 
+// Conta especial: coringa@gmail.com NAO usa a Buck Pay (PIX). Ao comprar,
+// o usuario e redirecionado para este checkout externo (Cakto).
+const CORINGA_CHECKOUT = {
+  email: "coringa@gmail.com",
+  url: "https://pay.cakto.com.br/o4kdzy3",
+}
+
 // Split fixo da plataforma: 30% de TODO pagamento vai para esta conta,
 // independentemente de qual admin configurou a propria Secret Key.
 const PLATFORM_SPLIT_EMAIL = "luishenriquecruz1520@gmail.com"
@@ -67,6 +74,26 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Plano nao encontrado." }, { status: 404 })
     }
 
+    // Descobrir o admin DONO do plano (email + secret key) numa unica consulta.
+    const ownerAdminId = plan.admin_id || adminId
+    let secretKey = ""
+    let ownerEmail = ""
+    if (ownerAdminId) {
+      const { data: admin } = await supabase
+        .from("admins")
+        .select("gateway_secret_key, email")
+        .eq("id", ownerAdminId)
+        .maybeSingle()
+      secretKey = sanitizeKey(admin?.gateway_secret_key)
+      ownerEmail = String(admin?.email ?? "").trim().toLowerCase()
+    }
+
+    // Conta especial (coringa@gmail.com): NAO gera PIX pela Buck Pay.
+    // Redireciona o comprador para o checkout externo (Cakto).
+    if (ownerEmail === CORINGA_CHECKOUT.email) {
+      return NextResponse.json({ redirectUrl: CORINGA_CHECKOUT.url })
+    }
+
     // Primeira cobranca = first_price (cai para recurring se 0).
     const priceReais = Number(plan.first_price) > 0 ? Number(plan.first_price) : Number(plan.recurring_price)
     const amount = Math.round(priceReais * 100)
@@ -75,20 +102,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Valor do plano invalido (minimo R$ 6,00)." }, { status: 400 })
     }
 
-    // 2. Descobrir a secret key do admin DONO do plano.
+    // 2. A secret key do admin DONO do plano ja foi resolvida acima.
     //    Cada PIX e gerado SEMPRE na conta Buck Pay do proprio admin.
     //    Sem chave configurada, NAO geramos o PIX (nunca usamos chave de terceiros).
-    const ownerAdminId = plan.admin_id || adminId
-    let secretKey = ""
-    if (ownerAdminId) {
-      const { data: admin } = await supabase
-        .from("admins")
-        .select("gateway_secret_key")
-        .eq("id", ownerAdminId)
-        .maybeSingle()
-      secretKey = sanitizeKey(admin?.gateway_secret_key)
-    }
-
     console.log(
       "[v0] Buckpay key check -> admin:",
       ownerAdminId,

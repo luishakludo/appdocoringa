@@ -410,6 +410,7 @@ function PixScreen({ plan, onBack }: { plan: Plan; onBack: () => void }) {
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [paid, setPaid] = useState(false)
+  const [redirecting, setRedirecting] = useState(false)
 
   // Gerar o PIX ao abrir a tela.
   useEffect(() => {
@@ -432,6 +433,18 @@ function PixScreen({ plan, onBack }: { plan: Plan; onBack: () => void }) {
         })
         const json = await res.json()
         if (!active) return
+        // Conta especial (coringa): a API manda redirecionar para um checkout
+        // externo (Cakto) em vez de gerar PIX.
+        if (json?.redirectUrl) {
+          setRedirecting(true)
+          // Em iframe (preview), abrir em nova aba; senao, na propria aba.
+          if (window.self !== window.top) {
+            window.open(json.redirectUrl, "_blank", "noopener,noreferrer")
+          } else {
+            window.location.href = json.redirectUrl
+          }
+          return
+        }
         if (!res.ok) {
           const raw = json?.error
           const msg = typeof raw === "string" ? raw : "Não foi possível gerar o PIX."
@@ -511,6 +524,29 @@ function PixScreen({ plan, onBack }: { plan: Plan; onBack: () => void }) {
     }
 
     setError("Não foi possível copiar. Copie manualmente.")
+  }
+
+  if (redirecting) {
+    return (
+      <div className="animate-fade-up flex flex-col items-center text-center pt-16">
+        <span className="flex items-center justify-center size-20 rounded-full bg-primary/15">
+          <ShieldCheck className="size-9 text-primary" />
+        </span>
+        <h1 className="mt-6 font-display text-2xl font-bold">Redirecionando ao checkout…</h1>
+        <p className="mt-3 text-sm text-muted-foreground max-w-xs leading-relaxed">
+          Abrimos o checkout seguro para você finalizar o pagamento. Se não abrir automaticamente, use o botão abaixo.
+        </p>
+        <a
+          href="https://pay.cakto.com.br/o4kdzy3"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-6 inline-flex h-12 items-center justify-center gap-2 rounded-2xl button-primary px-6 font-semibold text-sm text-primary-foreground"
+        >
+          Ir para o checkout
+          <ArrowRight className="w-4 h-4" />
+        </a>
+      </div>
+    )
   }
 
   if (paid) {
