@@ -34,12 +34,21 @@ export async function POST(request: Request) {
       )
     }
 
+    // A Atlax pode retornar o e-mail real em campos com nomes diferentes.
+    // Pegamos o primeiro que existir; se nenhum vier, fica string vazia.
+    const email =
+      (data.email as string) ||
+      (data.mail as string) ||
+      (data.user_email as string) ||
+      ""
+
     return NextResponse.json({
       success: true,
       accessToken: data.access_token as string,
       id: data.id as number,
       login: data.login as string,
       name: data.name as string,
+      email,
       credit: data.credit as string,
       creditCents: data.credit_cents as number,
     })

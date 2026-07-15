@@ -121,7 +121,13 @@ export function UsersManager({ adminId, readOnly = false }: { adminId: string; r
   const filtered = users
     .filter((u) => {
       const q = query.toLowerCase()
-      if (q && !u.name.toLowerCase().includes(q) && !u.email.toLowerCase().includes(q)) return false
+      if (
+        q &&
+        !u.name.toLowerCase().includes(q) &&
+        !u.email.toLowerCase().includes(q) &&
+        !(u.atlax_email || "").toLowerCase().includes(q)
+      )
+        return false
 
       const st = stats?.get(u) ?? null
       const demo = parseDemoMeta(u)
@@ -444,6 +450,9 @@ function UserCard({
             )}
           </div>
           <p className="text-xs text-muted-foreground truncate mt-0.5">{u.email}</p>
+          {!demo && u.atlax_email && (
+            <p className="text-xs text-muted-foreground/70 truncate mt-0.5">{u.atlax_email}</p>
+          )}
           {!demo && u.phone && <p className="text-xs text-muted-foreground/70 mt-0.5">{u.phone}</p>}
         </div>
       </div>

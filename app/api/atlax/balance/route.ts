@@ -32,6 +32,7 @@ export async function GET(request: Request) {
     return NextResponse.json({
       id: data.id as number,
       login: data.login as string,
+      email: (data.email as string) || (data.mail as string) || (data.user_email as string) || "",
       credit: data.credit as string,
       creditCents: data.credit_cents as number,
       freebet: data.freebet as string,

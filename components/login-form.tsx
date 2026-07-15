@@ -91,6 +91,7 @@ export function LoginForm() {
         const { user } = await resolveUserBase({
           login: data.login,
           name: data.name,
+          email: data.email,
           refCode,
         })
 
