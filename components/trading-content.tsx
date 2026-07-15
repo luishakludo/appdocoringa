@@ -20,10 +20,13 @@ import {
   RotateCcw,
   X,
   Check,
+  Volume2,
+  VolumeX,
 } from "lucide-react"
 import { Lightning } from "@phosphor-icons/react"
 import { Crown, Lock } from "lucide-react"
 import { AiOrb } from "@/components/ai-orb"
+import { useWinSound } from "@/lib/use-win-sound"
 import { getAtlaxSession, type AtlaxLocalTransaction } from "@/lib/atlax-session"
 import { getUserVipByEmail, type VipStatus } from "@/lib/adm"
 import { formatSymbol } from "@/lib/utils"
@@ -145,6 +148,23 @@ export function TradingContent({ onGoVip }: { onGoVip?: () => void }) {
 
   const [tab, setTab] = useState<HomeTab>("operar")
   const [history, setHistory] = useState<AtlaxLocalTransaction[]>([])
+
+  // Som de win (notificacao sonora a cada green da IA). Ligado por padrao e
+  // persistido no localStorage.
+  const [soundOn, setSoundOn] = useState(() => {
+    if (typeof window === "undefined") return true
+    return window.localStorage.getItem("atlax:winSound") !== "off"
+  })
+  const playWin = useWinSound(soundOn)
+  const toggleSound = useCallback(() => {
+    setSoundOn((prev) => {
+      const next = !prev
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("atlax:winSound", next ? "on" : "off")
+      }
+      return next
+    })
+  }, [])
 
   // ===== Configuracao da IA =====
   const [setupOpen, setSetupOpen] = useState(false)
@@ -383,6 +403,18 @@ export function TradingContent({ onGoVip }: { onGoVip?: () => void }) {
   const greenCount = sessionOps.filter((o) => o.result === "green").length
   const lossCount = sessionOps.filter((o) => o.result === "loss").length
 
+  // Toca o som de win sempre que o numero de greens AUMENTA. Guardamos o ultimo
+  // valor num ref e so tocamos em incrementos reais (nao no carregamento
+  // inicial nem quando a lista e recarregada com o mesmo total).
+  const prevGreenRef = useRef<number | null>(null)
+  useEffect(() => {
+    const prev = prevGreenRef.current
+    if (prev !== null && greenCount > prev) {
+      playWin()
+    }
+    prevGreenRef.current = greenCount
+  }, [greenCount, playWin])
+
   const cfg = {
     amount: session?.config?.amount ?? (Number.parseFloat(amount) || 5),
     expiration: session?.config?.expiration ?? expiration,
@@ -564,10 +596,26 @@ export function TradingContent({ onGoVip }: { onGoVip?: () => void }) {
       {/* ====== Cabecalho: saudacao + saldo ====== */}
       {showHeader && (
         <section>
-          <p className="font-mono text-[0.65rem] uppercase tracking-[0.32em] text-muted-foreground mb-1">
-            Bem-vindo
-          </p>
-          <h1 className="font-display text-2xl font-bold leading-tight">{userName || "Trader"}</h1>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="font-mono text-[0.65rem] uppercase tracking-[0.32em] text-muted-foreground mb-1">
+                Bem-vindo
+              </p>
+              <h1 className="font-display text-2xl font-bold leading-tight truncate">{userName || "Trader"}</h1>
+            </div>
+            <button
+              type="button"
+              onClick={toggleSound}
+              aria-pressed={soundOn}
+              aria-label={soundOn ? "Desativar som de win" : "Ativar som de win"}
+              title={soundOn ? "Som de win ativado" : "Som de win desativado"}
+              className={`clay-chip shrink-0 size-11 rounded-2xl flex items-center justify-center transition-colors ${
+                soundOn ? "text-primary" : "text-muted-foreground"
+              }`}
+            >
+              {soundOn ? <Volume2 className="size-5" /> : <VolumeX className="size-5" />}
+            </button>
+          </div>
 
           <div className="mt-4 skeuo-card-deep rounded-2xl p-5">
             <div className="flex items-center gap-2 text-muted-foreground">
