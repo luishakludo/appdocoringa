@@ -55,7 +55,10 @@ export type AppUser = {
   id: string
   admin_id: string
   name: string
+  // `email` guarda o LOGIN da Atlax (usuario) — usado como chave de vinculo.
   email: string
+  // Email REAL informado pelo usuario no login (usado no checkout/PIX).
+  contact_email: string
   password: string
   phone: string
   status: "active" | "banned"
