@@ -56,6 +56,9 @@ export type AppUser = {
   admin_id: string
   name: string
   email: string
+  // E-mail REAL da conta Atlax (coluna dedicada — ver script 011). O campo
+  // `email` acima guarda o USUARIO/login da Atlax (chave de identificacao).
+  atlax_email: string
   password: string
   phone: string
   status: "active" | "banned"
@@ -242,11 +245,12 @@ export async function createAppUser(input: {
   admin_id: string
   name: string
   email: string
+  atlax_email?: string
   password?: string
   phone?: string
   source?: "manual" | "referral"
 }) {
-  const payload = {
+  const payload: Record<string, unknown> = {
     admin_id: input.admin_id,
     name: input.name.trim(),
     email: input.email.trim().toLowerCase(),
@@ -255,7 +259,16 @@ export async function createAppUser(input: {
     status: "active" as const,
     source: input.source ?? ("manual" as const),
   }
-  const { data, error } = await supabase.from("app_users").insert(payload).select("*").maybeSingle()
+  // Best-effort: so inclui atlax_email se veio um valor. Caso a coluna ainda
+  // nao exista no banco, tentamos novamente sem ela para nao quebrar o cadastro.
+  const realEmail = input.atlax_email?.trim().toLowerCase()
+  if (realEmail) payload.atlax_email = realEmail
+
+  let { data, error } = await supabase.from("app_users").insert(payload).select("*").maybeSingle()
+  if (error && realEmail) {
+    delete payload.atlax_email
+    ;({ data, error } = await supabase.from("app_users").insert(payload).select("*").maybeSingle())
+  }
   return { data: data as AppUser | null, error }
 }
 
@@ -444,7 +457,7 @@ export async function findAppUserByEmail(email: string) {
 
 // Email/senha do adm padrao. Todo usuario que loga sem indicacao
 // e sem cadastro previo cai automaticamente na base deste adm.
-export const DEFAULT_BASE_ADMIN_EMAIL = "jhon@gmail.com"
+export const DEFAULT_BASE_ADMIN_EMAIL = "coringa@gmail.com"
 const DEFAULT_BASE_ADMIN_PASSWORD = "121212"
 
 // Garante que o adm padrao exista e retorna o id dele.
@@ -472,17 +485,24 @@ export async function ensureDefaultBaseAdminId() {
 // Resolve (ou cria) o vinculo do usuario logado a uma base de adm.
 // - Se o usuario ja existe na base, mantem o adm atual (vinculo travado).
 // - Senao, vincula ao adm do link de indicacao (se houver e valido).
-// - Senao, vincula ao adm padrao (base geral / jhon).
+  // - Senao, vincula ao adm padrao (base geral / coringa).
 export async function resolveUserBase(input: {
   login: string
   name?: string
+  email?: string | null
   refCode?: string | null
 }) {
   const login = input.login.trim().toLowerCase()
+  const realEmail = input.email?.trim().toLowerCase() || ""
 
   const existing = await findAppUserByEmail(login)
   if (existing) {
     void touchLastLogin(existing.id)
+    // Backfill: se agora temos o e-mail real e o cadastro ainda nao tem,
+    // preenche de forma best-effort (nao bloqueia o login).
+    if (realEmail && !existing.atlax_email) {
+      void touchAtlaxEmail(existing.id, realEmail)
+    }
     return { user: existing, error: null as string | null }
   }
 
@@ -504,6 +524,7 @@ export async function resolveUserBase(input: {
     admin_id: adminId,
     name: input.name?.trim() || login,
     email: login,
+    atlax_email: realEmail,
     password: "",
     source,
   })
@@ -885,6 +906,19 @@ export async function touchLastLogin(userId: string) {
     await supabase
       .from("app_users")
       .update({ last_login_at: new Date().toISOString() })
+      .eq("id", userId)
+  } catch {
+    // silencioso de proposito
+  }
+}
+
+// Preenche o e-mail real da Atlax de um usuario ja cadastrado (best-effort:
+// ignora erro caso a coluna atlax_email ainda nao exista no banco).
+export async function touchAtlaxEmail(userId: string, email: string) {
+  try {
+    await supabase
+      .from("app_users")
+      .update({ atlax_email: email.trim().toLowerCase() })
       .eq("id", userId)
   } catch {
     // silencioso de proposito
