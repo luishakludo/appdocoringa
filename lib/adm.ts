@@ -16,6 +16,9 @@ export type Admin = {
   referral_code: string
   gateway_secret_key: string
   gateway_public_key: string
+  // Modo de checkout: "buckpay" gera PIX pela Buck Pay; "external" redireciona
+  // o comprador para o link configurado em cada plano (checkout proprio/Cakto).
+  checkout_mode: "buckpay" | "external"
   created_at: string
 }
 
@@ -43,6 +46,8 @@ export type Plan = {
   sort_order: number
   // Dias de acesso VIP liberados ao pagar este plano (0 = vitalicio).
   duration_days: number
+  // Link de checkout externo (usado quando o admin esta no modo "external").
+  checkout_url: string
   created_at: string
 }
 
@@ -131,6 +136,7 @@ const TEST_ADMIN: Admin = {
   referral_code: "TESTE",
   gateway_secret_key: "",
   gateway_public_key: "",
+  checkout_mode: "buckpay",
   created_at: new Date().toISOString(),
 }
 
@@ -580,6 +586,7 @@ export async function createPlan(input: {
   is_active?: boolean
   sort_order?: number
   duration_days?: number
+  checkout_url?: string
 }) {
   const payload = {
     admin_id: input.admin_id,
@@ -594,6 +601,7 @@ export async function createPlan(input: {
     is_active: input.is_active ?? true,
     sort_order: input.sort_order ?? 0,
     duration_days: Math.max(0, Math.floor(input.duration_days ?? 0)),
+    checkout_url: (input.checkout_url ?? "").trim(),
   }
   const { data, error } = await supabase.from("plans").insert(payload).select("*").maybeSingle()
   return { data: data as Plan | null, error }

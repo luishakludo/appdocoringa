@@ -14,12 +14,14 @@ import {
   EyeOff,
   Check,
   Tag,
+  Link2,
 } from "lucide-react"
 import {
   listPlans,
   createPlan,
   updatePlan,
   deletePlan,
+  getAdmin,
   planPeriodLabel,
   planPeriodDefaultDays,
   planAccessDays,
@@ -41,6 +43,8 @@ export function PlansManager({ adminId }: { adminId: string }) {
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
   const [editTarget, setEditTarget] = useState<Plan | null>(null)
+  // Modo de checkout do admin: no modo "external" cada plano usa um link proprio.
+  const [externalMode, setExternalMode] = useState(false)
 
   async function refresh() {
     const { data } = await listPlans(adminId)
@@ -50,6 +54,9 @@ export function PlansManager({ adminId }: { adminId: string }) {
 
   useEffect(() => {
     refresh()
+    getAdmin(adminId).then(({ data }) => {
+      setExternalMode((data?.checkout_mode as string) === "external")
+    })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adminId])
 
@@ -160,6 +167,19 @@ export function PlansManager({ adminId }: { adminId: string }) {
                     ))}
                   </ul>
                 )}
+
+                {externalMode &&
+                  (p.checkout_url ? (
+                    <div className="mt-2 flex items-center gap-1.5 text-[0.7rem] text-muted-foreground">
+                      <Link2 className="size-3 text-primary shrink-0" />
+                      <span className="truncate font-mono">{p.checkout_url}</span>
+                    </div>
+                  ) : (
+                    <div className="mt-2 flex items-center gap-1.5 text-[0.7rem] text-amber-400">
+                      <Link2 className="size-3 shrink-0" />
+                      Sem link de checkout — edite o plano e cole o link.
+                    </div>
+                  ))}
               </div>
             </div>
 
@@ -202,6 +222,7 @@ export function PlansManager({ adminId }: { adminId: string }) {
       {showCreate && (
         <PlanModal
           adminId={adminId}
+          externalMode={externalMode}
           onClose={() => setShowCreate(false)}
           onSaved={() => {
             setShowCreate(false)
@@ -213,6 +234,7 @@ export function PlansManager({ adminId }: { adminId: string }) {
       {editTarget && (
         <PlanModal
           adminId={adminId}
+          externalMode={externalMode}
           plan={editTarget}
           onClose={() => setEditTarget(null)}
           onSaved={() => {
@@ -287,11 +309,13 @@ const BILLING_MODES: { value: BillingMode; label: string; hint: string }[] = [
 function PlanModal({
   adminId,
   plan,
+  externalMode,
   onClose,
   onSaved,
 }: {
   adminId: string
   plan?: Plan
+  externalMode: boolean
   onClose: () => void
   onSaved: () => void
 }) {
@@ -321,6 +345,7 @@ function PlanModal({
   const [recurringPrice, setRecurringPrice] = useState(plan ? String(plan.recurring_price) : "")
   const [badge, setBadge] = useState(plan?.badge ?? "")
   const [isPopular, setIsPopular] = useState(plan?.is_popular ?? false)
+  const [checkoutUrl, setCheckoutUrl] = useState(plan?.checkout_url ?? "")
   const [features, setFeatures] = useState<string[]>(plan?.features ?? [])
   const [featureInput, setFeatureInput] = useState("")
   const [saving, setSaving] = useState(false)
@@ -389,6 +414,14 @@ function PlanModal({
     // Dias de VIP: campo vazio -> 0 (usa padrao da periodicidade em planAccessDays).
     const duration_days = Math.max(0, Math.floor(Number(durationDays.replace(",", ".")) || 0))
 
+    // Link de checkout externo (usado quando o admin esta no modo "external").
+    const checkout_url = checkoutUrl.trim()
+    if (externalMode && checkout_url && !/^https?:\/\//i.test(checkout_url)) {
+      setError("O link de checkout deve começar com http:// ou https://")
+      setSaving(false)
+      return
+    }
+
     if (editing && plan) {
       const { error } = await updatePlan(plan.id, {
         name: name.trim(),
@@ -399,6 +432,7 @@ function PlanModal({
         is_popular: isPopular,
         features,
         duration_days,
+        checkout_url,
       })
       if (error) {
         setError("Erro ao salvar o plano.")
@@ -416,6 +450,7 @@ function PlanModal({
         is_popular: isPopular,
         features,
         duration_days,
+        checkout_url,
       })
       if (error) {
         setError("Erro ao criar o plano.")
@@ -560,6 +595,24 @@ function PlanModal({
             placeholder="Ex: Economize 25%"
           />
         </Labeled>
+
+        {externalMode && (
+          <Labeled label="Link de checkout externo">
+            <div className="clay-input rounded-lg flex items-center gap-2 px-3 h-11">
+              <Link2 className="size-4 text-primary shrink-0" />
+              <input
+                className="flex-1 bg-transparent outline-none text-sm text-foreground placeholder:text-muted-foreground/50"
+                value={checkoutUrl}
+                onChange={(e) => setCheckoutUrl(e.target.value)}
+                placeholder="https://pay.cakto.com.br/..."
+                inputMode="url"
+              />
+            </div>
+            <p className="text-[0.65rem] text-muted-foreground mt-1 leading-relaxed">
+              Ao comprar este plano, o usuário será enviado direto para este link — nenhum PIX é gerado.
+            </p>
+          </Labeled>
+        )}
 
         <Labeled label="Benefícios">
           <div className="flex gap-2">

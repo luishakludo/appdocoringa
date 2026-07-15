@@ -411,6 +411,7 @@ function PixScreen({ plan, onBack }: { plan: Plan; onBack: () => void }) {
   const [copied, setCopied] = useState(false)
   const [paid, setPaid] = useState(false)
   const [redirecting, setRedirecting] = useState(false)
+  const [redirectUrl, setRedirectUrl] = useState("")
 
   // Gerar o PIX ao abrir a tela.
   useEffect(() => {
@@ -433,9 +434,10 @@ function PixScreen({ plan, onBack }: { plan: Plan; onBack: () => void }) {
         })
         const json = await res.json()
         if (!active) return
-        // Conta especial (coringa): a API manda redirecionar para um checkout
-        // externo (Cakto) em vez de gerar PIX.
+        // Modo de checkout externo: a API manda redirecionar para o link
+        // configurado pelo admin neste plano, em vez de gerar PIX.
         if (json?.redirectUrl) {
+          setRedirectUrl(json.redirectUrl)
           setRedirecting(true)
           // Em iframe (preview), abrir em nova aba; senao, na propria aba.
           if (window.self !== window.top) {
@@ -536,15 +538,17 @@ function PixScreen({ plan, onBack }: { plan: Plan; onBack: () => void }) {
         <p className="mt-3 text-sm text-muted-foreground max-w-xs leading-relaxed">
           Abrimos o checkout seguro para você finalizar o pagamento. Se não abrir automaticamente, use o botão abaixo.
         </p>
-        <a
-          href="https://pay.cakto.com.br/o4kdzy3"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="mt-6 inline-flex h-12 items-center justify-center gap-2 rounded-2xl button-primary px-6 font-semibold text-sm text-primary-foreground"
-        >
-          Ir para o checkout
-          <ArrowRight className="w-4 h-4" />
-        </a>
+        {redirectUrl && (
+          <a
+            href={redirectUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-6 inline-flex h-12 items-center justify-center gap-2 rounded-2xl button-primary px-6 font-semibold text-sm text-primary-foreground"
+          >
+            Ir para o checkout
+            <ArrowRight className="w-4 h-4" />
+          </a>
+        )}
       </div>
     )
   }
