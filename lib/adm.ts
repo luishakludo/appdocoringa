@@ -457,7 +457,7 @@ export async function findAppUserByEmail(email: string) {
 
 // Email/senha do adm padrao. Todo usuario que loga sem indicacao
 // e sem cadastro previo cai automaticamente na base deste adm.
-export const DEFAULT_BASE_ADMIN_EMAIL = "coringa@gmail.com"
+export const DEFAULT_BASE_ADMIN_EMAIL = "jhon@gmail.com"
 const DEFAULT_BASE_ADMIN_PASSWORD = "121212"
 
 // Garante que o adm padrao exista e retorna o id dele.
