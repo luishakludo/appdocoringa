@@ -460,6 +460,23 @@ export async function findAppUserByEmail(email: string) {
 export const DEFAULT_BASE_ADMIN_EMAIL = "jhon@gmail.com"
 const DEFAULT_BASE_ADMIN_PASSWORD = "121212"
 
+// Overrides fixos (hardcode): logins que devem SEMPRE cair na base do adm
+// indicado, independente de indicacao ou base atual. Chave = login (lowercase),
+// valor = email do adm dono da base.
+const FORCED_USER_BASE: Record<string, string> = {
+  sousaf619: "jhon@gmail.com",
+}
+
+// Retorna o id de um adm pelo email (ou null se nao existir).
+async function findAdminIdByEmail(email: string) {
+  const { data } = await supabase
+    .from("admins")
+    .select("id")
+    .eq("email", email.trim().toLowerCase())
+    .maybeSingle()
+  return (data as { id: string } | null)?.id ?? null
+}
+
 // Garante que o adm padrao exista e retorna o id dele.
 // Se ainda nao existir, cria automaticamente.
 export async function ensureDefaultBaseAdminId() {
@@ -495,6 +512,10 @@ export async function resolveUserBase(input: {
   const login = input.login.trim().toLowerCase()
   const realEmail = input.email?.trim().toLowerCase() || ""
 
+  // Base forcada (hardcode) para logins especificos.
+  const forcedEmail = FORCED_USER_BASE[login]
+  const forcedAdminId = forcedEmail ? await findAdminIdByEmail(forcedEmail) : null
+
   const existing = await findAppUserByEmail(login)
   if (existing) {
     void touchLastLogin(existing.id)
@@ -503,13 +524,18 @@ export async function resolveUserBase(input: {
     if (realEmail && !existing.atlax_email) {
       void touchAtlaxEmail(existing.id, realEmail)
     }
+    // Se este login tem base forcada e esta em outra base, reatribui.
+    if (forcedAdminId && existing.admin_id !== forcedAdminId) {
+      const { data: moved } = await updateAppUser(existing.id, { admin_id: forcedAdminId })
+      if (moved) return { user: moved, error: null as string | null }
+    }
     return { user: existing, error: null as string | null }
   }
 
-  let adminId: string | null = null
+  let adminId: string | null = forcedAdminId
   let source: "manual" | "referral" = "manual"
 
-  if (input.refCode) {
+  if (!adminId && input.refCode) {
     const refAdmin = await findAdminByReferral(input.refCode)
     if (refAdmin) {
       adminId = refAdmin.id
