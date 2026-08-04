@@ -74,12 +74,11 @@ function formatWhen(iso: string | null): string {
 }
 
 // Saldo relevante de um usuário para fins de filtro/ordenação:
-// demo -> saldo da banca; assinante -> total pago; demais -> 0.
-function userBalance(u: AppUser, stats: UserPaymentStats | null): number {
+// demo -> saldo da banca; conta real -> último saldo Atlax sincronizado.
+function userBalance(u: AppUser, _stats: UserPaymentStats | null): number {
   const demo = parseDemoMeta(u)
   if (demo) return demo.balance
-  if (stats && stats.paidCount > 0) return stats.totalPaid
-  return 0
+  return Number(u.atlax_balance) || 0
 }
 
 type UserType = "all" | "subscriber" | "demo" | "free" | "banned"
@@ -500,8 +499,11 @@ function UserCard({
           </>
         ) : (
           <>
-            <MiniStat label="Saldo" value={isSubscriber ? `R$ ${formatBRL(stats!.totalPaid)}` : "—"} />
-            <MiniStat label="Pagtos" value={String(stats?.paidCount ?? 0)} />
+            <MiniStat
+              label="Saldo"
+              value={u.atlax_balance != null ? `R$ ${formatBRL(Number(u.atlax_balance))}` : "—"}
+            />
+            <MiniStat label="Pagos" value={String(stats?.paidCount ?? 0)} />
             <MiniStat label="Acesso" value={formatWhen(u.last_login_at)} />
           </>
         )}
