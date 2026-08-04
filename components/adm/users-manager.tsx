@@ -20,6 +20,7 @@ import {
   Wallet,
   Gauge,
   Crown,
+  Gift,
   CreditCard,
   Clock,
   User as UserIcon,
@@ -38,6 +39,8 @@ import {
   computeVipStatus,
   grantVip,
   revokeVip,
+  grantTrial,
+  isTrialStatus,
   type AppUser,
   type UserPaymentStats,
 } from "@/lib/adm"
@@ -100,6 +103,7 @@ export function UsersManager({ adminId, readOnly = false }: { adminId: string; r
   const [pwTarget, setPwTarget] = useState<AppUser | null>(null)
   const [editTarget, setEditTarget] = useState<AppUser | null>(null)
   const [vipTarget, setVipTarget] = useState<AppUser | null>(null)
+  const [trialTarget, setTrialTarget] = useState<AppUser | null>(null)
 
   async function refresh() {
     const [{ data }, { data: txs }] = await Promise.all([listAppUsers(adminId), listTransactions(adminId)])
@@ -303,6 +307,7 @@ export function UsersManager({ adminId, readOnly = false }: { adminId: string; r
             onEdit={() => setEditTarget(u)}
             onPassword={() => setPwTarget(u)}
             onVip={() => setVipTarget(u)}
+            onTrial={() => setTrialTarget(u)}
             onToggleBan={() => toggleBan(u)}
             onRemove={() => remove(u)}
           />
@@ -355,6 +360,17 @@ export function UsersManager({ adminId, readOnly = false }: { adminId: string; r
           }}
         />
       )}
+
+      {trialTarget && (
+        <TrialModal
+          user={trialTarget}
+          onClose={() => setTrialTarget(null)}
+          onSaved={() => {
+            setTrialTarget(null)
+            refresh()
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -368,6 +384,7 @@ function UserCard({
   onEdit,
   onPassword,
   onVip,
+  onTrial,
   onToggleBan,
   onRemove,
 }: {
@@ -379,6 +396,7 @@ function UserCard({
   onEdit: () => void
   onPassword: () => void
   onVip: () => void
+  onTrial: () => void
   onToggleBan: () => void
   onRemove: () => void
 }) {
@@ -386,6 +404,7 @@ function UserCard({
   const isSubscriber = !!stats && stats.paidCount > 0
   const monthsPaid = Math.min(12, stats?.paidCount ?? 0)
   const vip = computeVipStatus(u)
+  const isTrial = vip.isVip && isTrialStatus(vip)
 
   return (
     <div
@@ -426,7 +445,13 @@ function UserCard({
             >
               {u.status === "active" ? "Ativo" : "Banido"}
             </span>
-            {!demo && vip.isVip && (
+            {!demo && vip.isVip && isTrial && (
+              <span className="px-2 h-5 inline-flex items-center gap-1 rounded-full text-[0.55rem] font-mono uppercase tracking-wider bg-emerald-500/20 text-emerald-400">
+                <Gift className="size-2.5" />
+                {`Teste · ${vip.daysLeft}d`}
+              </span>
+            )}
+            {!demo && vip.isVip && !isTrial && (
               <span className="px-2 h-5 inline-flex items-center gap-1 rounded-full text-[0.55rem] font-mono uppercase tracking-wider bg-primary/20 text-primary">
                 <Crown className="size-2.5" />
                 {vip.lifetime ? "VIP vitalício" : `VIP · ${vip.daysLeft}d`}
@@ -516,17 +541,30 @@ function UserCard({
       </div>
 
       {!readOnly && !demo && (
-        <button
-          onClick={onVip}
-          className={`w-full h-9 rounded-lg mt-3 flex items-center justify-center gap-1.5 text-xs font-medium transition-colors ${
-            vip.isVip
-              ? "bg-primary/15 text-primary ring-1 ring-primary/30 hover:bg-primary/20"
-              : "clay-input text-foreground/90 hover:text-foreground"
-          }`}
-        >
-          <Crown className="size-3.5" />
-          {vip.isVip ? "Gerenciar VIP" : "Dar VIP"}
-        </button>
+        <div className="grid grid-cols-2 gap-2 mt-3">
+          <button
+            onClick={onVip}
+            className={`h-9 rounded-lg flex items-center justify-center gap-1.5 text-xs font-medium transition-colors ${
+              vip.isVip && !isTrial
+                ? "bg-primary/15 text-primary ring-1 ring-primary/30 hover:bg-primary/20"
+                : "clay-input text-foreground/90 hover:text-foreground"
+            }`}
+          >
+            <Crown className="size-3.5" />
+            {vip.isVip && !isTrial ? "Gerenciar VIP" : "Dar VIP"}
+          </button>
+          <button
+            onClick={onTrial}
+            className={`h-9 rounded-lg flex items-center justify-center gap-1.5 text-xs font-medium transition-colors ${
+              isTrial
+                ? "bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/30 hover:bg-emerald-500/20"
+                : "clay-input text-foreground/90 hover:text-foreground"
+            }`}
+          >
+            <Gift className="size-3.5" />
+            {isTrial ? "Teste ativo" : "Teste grátis"}
+          </button>
+        </div>
       )}
 
       {!readOnly && (
@@ -1149,6 +1187,114 @@ function VipModal({
           >
             <Ban className="size-4" />
             Remover VIP
+          </button>
+        )}
+      </form>
+    </ModalShell>
+  )
+}
+
+function TrialModal({
+  user,
+  onClose,
+  onSaved,
+}: {
+  user: AppUser
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const current = computeVipStatus(user)
+  const activeTrial = current.isVip && isTrialStatus(current)
+  const [days, setDays] = useState<number>(activeTrial && current.daysLeft > 0 ? current.daysLeft : 3)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function grant(e: React.FormEvent) {
+    e.preventDefault()
+    setSaving(true)
+    setError(null)
+    const { error } = await grantTrial(user.id, days)
+    if (error) {
+      setError("Não foi possível ativar o teste grátis.")
+      setSaving(false)
+      return
+    }
+    onSaved()
+  }
+
+  async function remove() {
+    if (!confirm(`Encerrar o teste grátis de ${user.name}? Ele perderá o acesso.`)) return
+    setSaving(true)
+    const { error } = await revokeVip(user.id)
+    if (error) {
+      setError("Não foi possível encerrar o teste.")
+      setSaving(false)
+      return
+    }
+    onSaved()
+  }
+
+  return (
+    <ModalShell title="Teste grátis" onClose={onClose}>
+      <form onSubmit={grant} className="space-y-3">
+        <p className="text-sm text-muted-foreground -mt-1">
+          Usuário: <span className="text-foreground">{user.name}</span>
+        </p>
+
+        {activeTrial && (
+          <div className="skeuo-card-inset rounded-xl p-3 flex items-center gap-3">
+            <span className="flex items-center justify-center size-9 rounded-lg bg-emerald-500/15 shrink-0">
+              <Gift className="size-4 text-emerald-400" />
+            </span>
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-foreground">Teste ativo</p>
+              <p className="text-[0.7rem] text-muted-foreground">{current.daysLeft} dia(s) restante(s)</p>
+            </div>
+          </div>
+        )}
+
+        <Labeled label="Dias de teste">
+          <div className="grid grid-cols-7 gap-1.5">
+            {[1, 2, 3, 4, 5, 6, 7].map((d) => (
+              <button
+                key={d}
+                type="button"
+                onClick={() => setDays(d)}
+                className={`h-10 rounded-lg text-sm font-semibold tabular-nums transition-colors ${
+                  days === d
+                    ? "bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/40"
+                    : "clay-input text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {d}
+              </button>
+            ))}
+          </div>
+          <p className="text-[0.65rem] text-muted-foreground mt-2">
+            O usuário terá {days} dia(s) de acesso grátis a partir de hoje. A contagem cai sozinha e o acesso expira no
+            fim do período.
+          </p>
+        </Labeled>
+
+        {error && <p className="text-xs text-primary">{error}</p>}
+
+        <button
+          type="submit"
+          disabled={saving}
+          className="button-primary w-full h-11 rounded-lg font-semibold text-sm mt-1 disabled:opacity-70"
+        >
+          {saving ? "Salvando..." : activeTrial ? "Atualizar teste" : "Ativar teste grátis"}
+        </button>
+
+        {activeTrial && (
+          <button
+            type="button"
+            onClick={remove}
+            disabled={saving}
+            className="w-full h-11 rounded-lg clay-input flex items-center justify-center gap-2 text-sm text-primary hover:text-primary/80 disabled:opacity-70"
+          >
+            <Ban className="size-4" />
+            Encerrar teste
           </button>
         )}
       </form>

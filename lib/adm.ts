@@ -825,6 +825,27 @@ export async function grantVip(
   return { data: data as AppUser | null, error }
 }
 
+// ------------------------------------------------------------
+// Teste gratis
+// ------------------------------------------------------------
+// O teste gratis reaproveita as colunas de VIP (mesma mecanica de acesso
+// temporario que expira sozinho e fica salvo no banco). A diferenca e apenas
+// a MARCA no vip_plan_name, que permite distinguir "teste" de "assinatura VIP"
+// na interface e nos relatorios.
+export const TRIAL_PLAN_NAME = "Teste grátis"
+
+// Um status VIP e, na verdade, um teste gratis?
+export function isTrialStatus(s: Pick<VipStatus, "planName">): boolean {
+  return (s.planName || "").trim().toLowerCase() === TRIAL_PLAN_NAME.toLowerCase()
+}
+
+// Concede/renova um teste gratis de `days` dias (conta a partir de hoje).
+// Limitado a 1..30 dias por seguranca (o painel usa 1..7).
+export async function grantTrial(userId: string, days: number) {
+  const d = Math.min(30, Math.max(1, Math.floor(days || 0)))
+  return grantVip(userId, { days: d, planName: TRIAL_PLAN_NAME, extend: false })
+}
+
 // Remove o VIP de um usuario (volta a ser bloqueado).
 export async function revokeVip(userId: string) {
   const patch = {
