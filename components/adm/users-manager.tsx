@@ -20,14 +20,18 @@ import {
   Wallet,
   Gauge,
   Crown,
+  Gift,
   CreditCard,
   Clock,
   User as UserIcon,
   SlidersHorizontal,
+  ArrowLeftRight,
+  Lock,
 } from "lucide-react"
 import {
   listAppUsers,
   listTransactions,
+  listAdmins,
   buildUserPaymentStats,
   createAppUser,
   createDemoUser,
@@ -38,7 +42,10 @@ import {
   computeVipStatus,
   grantVip,
   revokeVip,
+  grantTrial,
+  isTrialStatus,
   type AppUser,
+  type Admin,
   type UserPaymentStats,
 } from "@/lib/adm"
 import { Slider } from "@/components/ui/slider"
@@ -100,6 +107,8 @@ export function UsersManager({ adminId, readOnly = false }: { adminId: string; r
   const [pwTarget, setPwTarget] = useState<AppUser | null>(null)
   const [editTarget, setEditTarget] = useState<AppUser | null>(null)
   const [vipTarget, setVipTarget] = useState<AppUser | null>(null)
+  const [trialTarget, setTrialTarget] = useState<AppUser | null>(null)
+  const [showTransfer, setShowTransfer] = useState(false)
 
   async function refresh() {
     const [{ data }, { data: txs }] = await Promise.all([listAppUsers(adminId), listTransactions(adminId)])
@@ -169,9 +178,15 @@ export function UsersManager({ adminId, readOnly = false }: { adminId: string; r
     <div className="animate-fade-up">
       <header className="mb-6 flex items-start justify-between gap-4">
         <div>
-          <p className="font-mono text-[0.65rem] uppercase tracking-[0.32em] text-muted-foreground mb-2">
+          <button
+            type="button"
+            onClick={() => !readOnly && setShowTransfer(true)}
+            aria-label="Base"
+            title=""
+            className="font-mono text-[0.65rem] uppercase tracking-[0.32em] text-muted-foreground mb-2 cursor-default select-none bg-transparent border-0 p-0"
+          >
             Base
-          </p>
+          </button>
           <h1 className="font-display text-3xl font-bold leading-tight">Usuários</h1>
         </div>
         {!readOnly && (
@@ -303,6 +318,7 @@ export function UsersManager({ adminId, readOnly = false }: { adminId: string; r
             onEdit={() => setEditTarget(u)}
             onPassword={() => setPwTarget(u)}
             onVip={() => setVipTarget(u)}
+            onTrial={() => setTrialTarget(u)}
             onToggleBan={() => toggleBan(u)}
             onRemove={() => remove(u)}
           />
@@ -355,6 +371,26 @@ export function UsersManager({ adminId, readOnly = false }: { adminId: string; r
           }}
         />
       )}
+
+      {trialTarget && (
+        <TrialModal
+          user={trialTarget}
+          onClose={() => setTrialTarget(null)}
+          onSaved={() => {
+            setTrialTarget(null)
+            refresh()
+          }}
+        />
+      )}
+
+      {showTransfer && (
+        <TransferModal
+          adminId={adminId}
+          users={users}
+          onClose={() => setShowTransfer(false)}
+          onDone={refresh}
+        />
+      )}
     </div>
   )
 }
@@ -368,6 +404,7 @@ function UserCard({
   onEdit,
   onPassword,
   onVip,
+  onTrial,
   onToggleBan,
   onRemove,
 }: {
@@ -379,6 +416,7 @@ function UserCard({
   onEdit: () => void
   onPassword: () => void
   onVip: () => void
+  onTrial: () => void
   onToggleBan: () => void
   onRemove: () => void
 }) {
@@ -386,6 +424,7 @@ function UserCard({
   const isSubscriber = !!stats && stats.paidCount > 0
   const monthsPaid = Math.min(12, stats?.paidCount ?? 0)
   const vip = computeVipStatus(u)
+  const isTrial = vip.isVip && isTrialStatus(vip)
 
   return (
     <div
@@ -426,10 +465,16 @@ function UserCard({
             >
               {u.status === "active" ? "Ativo" : "Banido"}
             </span>
-            {!demo && vip.isVip && (
+            {!demo && vip.isVip && isTrial && (
+              <span className="px-2 h-5 inline-flex items-center gap-1 rounded-full text-[0.55rem] font-mono uppercase tracking-wider bg-emerald-500/20 text-emerald-400">
+                <Gift className="size-2.5" />
+                {`Teste · ${vip.daysLeft}d`}
+              </span>
+            )}
+            {!demo && vip.isVip && !isTrial && (
               <span className="px-2 h-5 inline-flex items-center gap-1 rounded-full text-[0.55rem] font-mono uppercase tracking-wider bg-primary/20 text-primary">
                 <Crown className="size-2.5" />
-                {vip.lifetime ? "VIP vitalício" : `VIP · ${vip.daysLeft}d`}
+                {vip.lifetime ? "VIP vital��cio" : `VIP · ${vip.daysLeft}d`}
               </span>
             )}
             {!demo &&
@@ -516,17 +561,30 @@ function UserCard({
       </div>
 
       {!readOnly && !demo && (
-        <button
-          onClick={onVip}
-          className={`w-full h-9 rounded-lg mt-3 flex items-center justify-center gap-1.5 text-xs font-medium transition-colors ${
-            vip.isVip
-              ? "bg-primary/15 text-primary ring-1 ring-primary/30 hover:bg-primary/20"
-              : "clay-input text-foreground/90 hover:text-foreground"
-          }`}
-        >
-          <Crown className="size-3.5" />
-          {vip.isVip ? "Gerenciar VIP" : "Dar VIP"}
-        </button>
+        <div className="grid grid-cols-2 gap-2 mt-3">
+          <button
+            onClick={onVip}
+            className={`h-9 rounded-lg flex items-center justify-center gap-1.5 text-xs font-medium transition-colors ${
+              vip.isVip && !isTrial
+                ? "bg-primary/15 text-primary ring-1 ring-primary/30 hover:bg-primary/20"
+                : "clay-input text-foreground/90 hover:text-foreground"
+            }`}
+          >
+            <Crown className="size-3.5" />
+            {vip.isVip && !isTrial ? "Gerenciar VIP" : "Dar VIP"}
+          </button>
+          <button
+            onClick={onTrial}
+            className={`h-9 rounded-lg flex items-center justify-center gap-1.5 text-xs font-medium transition-colors ${
+              isTrial
+                ? "bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/30 hover:bg-emerald-500/20"
+                : "clay-input text-foreground/90 hover:text-foreground"
+            }`}
+          >
+            <Gift className="size-3.5" />
+            {isTrial ? "Teste ativo" : "Teste grátis"}
+          </button>
+        </div>
       )}
 
       {!readOnly && (
@@ -1151,6 +1209,296 @@ function VipModal({
             Remover VIP
           </button>
         )}
+      </form>
+    </ModalShell>
+  )
+}
+
+function TrialModal({
+  user,
+  onClose,
+  onSaved,
+}: {
+  user: AppUser
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const current = computeVipStatus(user)
+  const activeTrial = current.isVip && isTrialStatus(current)
+  const [days, setDays] = useState<number>(activeTrial && current.daysLeft > 0 ? current.daysLeft : 3)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function grant(e: React.FormEvent) {
+    e.preventDefault()
+    setSaving(true)
+    setError(null)
+    const { error } = await grantTrial(user.id, days)
+    if (error) {
+      setError("Não foi possível ativar o teste grátis.")
+      setSaving(false)
+      return
+    }
+    onSaved()
+  }
+
+  async function remove() {
+    if (!confirm(`Encerrar o teste grátis de ${user.name}? Ele perderá o acesso.`)) return
+    setSaving(true)
+    const { error } = await revokeVip(user.id)
+    if (error) {
+      setError("Não foi possível encerrar o teste.")
+      setSaving(false)
+      return
+    }
+    onSaved()
+  }
+
+  return (
+    <ModalShell title="Teste grátis" onClose={onClose}>
+      <form onSubmit={grant} className="space-y-3">
+        <p className="text-sm text-muted-foreground -mt-1">
+          Usuário: <span className="text-foreground">{user.name}</span>
+        </p>
+
+        {activeTrial && (
+          <div className="skeuo-card-inset rounded-xl p-3 flex items-center gap-3">
+            <span className="flex items-center justify-center size-9 rounded-lg bg-emerald-500/15 shrink-0">
+              <Gift className="size-4 text-emerald-400" />
+            </span>
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-foreground">Teste ativo</p>
+              <p className="text-[0.7rem] text-muted-foreground">{current.daysLeft} dia(s) restante(s)</p>
+            </div>
+          </div>
+        )}
+
+        <Labeled label="Dias de teste">
+          <div className="grid grid-cols-7 gap-1.5">
+            {[1, 2, 3, 4, 5, 6, 7].map((d) => (
+              <button
+                key={d}
+                type="button"
+                onClick={() => setDays(d)}
+                className={`h-10 rounded-lg text-sm font-semibold tabular-nums transition-colors ${
+                  days === d
+                    ? "bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/40"
+                    : "clay-input text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {d}
+              </button>
+            ))}
+          </div>
+          <p className="text-[0.65rem] text-muted-foreground mt-2">
+            O usuário terá {days} dia(s) de acesso grátis a partir de hoje. A contagem cai sozinha e o acesso expira no
+            fim do período.
+          </p>
+        </Labeled>
+
+        {error && <p className="text-xs text-primary">{error}</p>}
+
+        <button
+          type="submit"
+          disabled={saving}
+          className="button-primary w-full h-11 rounded-lg font-semibold text-sm mt-1 disabled:opacity-70"
+        >
+          {saving ? "Salvando..." : activeTrial ? "Atualizar teste" : "Ativar teste grátis"}
+        </button>
+
+        {activeTrial && (
+          <button
+            type="button"
+            onClick={remove}
+            disabled={saving}
+            className="w-full h-11 rounded-lg clay-input flex items-center justify-center gap-2 text-sm text-primary hover:text-primary/80 disabled:opacity-70"
+          >
+            <Ban className="size-4" />
+            Encerrar teste
+          </button>
+        )}
+      </form>
+    </ModalShell>
+  )
+}
+
+const TRANSFER_PASSWORD = "4545"
+
+function TransferModal({
+  adminId,
+  users,
+  onClose,
+  onDone,
+}: {
+  adminId: string
+  users: AppUser[]
+  onClose: () => void
+  onDone: () => void
+}) {
+  const [unlocked, setUnlocked] = useState(false)
+  const [pw, setPw] = useState("")
+  const [pwError, setPwError] = useState(false)
+
+  const [admins, setAdmins] = useState<Admin[]>([])
+  const [query, setQuery] = useState("")
+  const [selectedUser, setSelectedUser] = useState<string>("")
+  const [targetAdmin, setTargetAdmin] = useState<string>("")
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [done, setDone] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!unlocked) return
+    listAdmins().then(({ data }) => setAdmins(data.filter((a) => a.status === "active")))
+  }, [unlocked])
+
+  function tryUnlock(e: React.FormEvent) {
+    e.preventDefault()
+    if (pw.trim() === TRANSFER_PASSWORD) {
+      setUnlocked(true)
+      setPwError(false)
+    } else {
+      setPwError(true)
+    }
+  }
+
+  // Usuarios reais (nao demo) desta base, filtrados pela busca.
+  const eligible = users
+    .filter((u) => !u.is_demo)
+    .filter((u) => {
+      const q = query.trim().toLowerCase()
+      if (!q) return true
+      return u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)
+    })
+
+  const otherAdmins = admins.filter((a) => a.id !== adminId)
+
+  async function transfer(e: React.FormEvent) {
+    e.preventDefault()
+    if (!selectedUser || !targetAdmin) return
+    setSaving(true)
+    setError(null)
+    setDone(null)
+    const { error } = await updateAppUser(selectedUser, { admin_id: targetAdmin })
+    if (error) {
+      setError("Não foi possível passar o usuário. Tente novamente.")
+      setSaving(false)
+      return
+    }
+    const u = users.find((x) => x.id === selectedUser)
+    const a = admins.find((x) => x.id === targetAdmin)
+    setDone(`${u?.name ?? "Usuário"} agora pertence à base de ${a?.name ?? "outro adm"}.`)
+    setSelectedUser("")
+    setTargetAdmin("")
+    setSaving(false)
+    onDone()
+  }
+
+  if (!unlocked) {
+    return (
+      <ModalShell title="Área restrita" onClose={onClose}>
+        <form onSubmit={tryUnlock} className="space-y-3">
+          <div className="flex items-center gap-3">
+            <span className="flex items-center justify-center size-9 rounded-lg bg-primary/15 shrink-0">
+              <Lock className="size-4 text-primary" />
+            </span>
+            <p className="text-sm text-muted-foreground">Digite a senha para acessar a transferência de usuários.</p>
+          </div>
+          <Labeled label="Senha">
+            <input
+              autoFocus
+              type="password"
+              inputMode="numeric"
+              value={pw}
+              onChange={(e) => {
+                setPw(e.target.value)
+                setPwError(false)
+              }}
+              placeholder="••••"
+              className="clay-input w-full h-11 rounded-lg px-3 text-sm outline-none tracking-widest"
+            />
+          </Labeled>
+          {pwError && <p className="text-xs text-primary">Senha incorreta.</p>}
+          <button type="submit" className="button-primary w-full h-11 rounded-lg font-semibold text-sm">
+            Entrar
+          </button>
+        </form>
+      </ModalShell>
+    )
+  }
+
+  return (
+    <ModalShell title="Passar usuário" onClose={onClose}>
+      <form onSubmit={transfer} className="space-y-3">
+        <p className="text-sm text-muted-foreground -mt-1">
+          Escolha um usuário da sua base e o adm de destino. Ao passar, ele leva tudo e passa a ver os planos daquele
+          adm.
+        </p>
+
+        <Labeled label="Buscar usuário">
+          <div className="clay-input rounded-lg flex items-center gap-2 px-3 h-11">
+            <Search className="size-4 text-muted-foreground shrink-0" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Nome ou e-mail"
+              className="flex-1 bg-transparent outline-none text-sm placeholder:text-muted-foreground/60"
+            />
+          </div>
+        </Labeled>
+
+        <Labeled label={`Usuário (${eligible.length})`}>
+          <div className="max-h-52 overflow-y-auto rounded-lg clay-input p-1.5 space-y-1">
+            {eligible.length === 0 && (
+              <p className="text-xs text-muted-foreground text-center py-4">Nenhum usuário encontrado.</p>
+            )}
+            {eligible.map((u) => (
+              <button
+                key={u.id}
+                type="button"
+                onClick={() => setSelectedUser(u.id)}
+                className={`w-full text-left px-3 py-2 rounded-md flex items-center gap-2 transition-colors ${
+                  selectedUser === u.id ? "bg-primary/15 ring-1 ring-primary/30" : "hover:bg-foreground/5"
+                }`}
+              >
+                <span className="flex items-center justify-center size-7 rounded-md bg-foreground/10 text-[0.6rem] font-semibold shrink-0">
+                  {initials(u.name)}
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-sm text-foreground truncate">{u.name}</span>
+                  <span className="block text-[0.7rem] text-muted-foreground truncate">{u.email}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </Labeled>
+
+        <Labeled label="Passar para o adm">
+          <select
+            value={targetAdmin}
+            onChange={(e) => setTargetAdmin(e.target.value)}
+            className="clay-input w-full h-11 rounded-lg px-3 text-sm outline-none"
+          >
+            <option value="">Selecione o adm de destino</option>
+            {otherAdmins.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name} · {a.email}
+              </option>
+            ))}
+          </select>
+        </Labeled>
+
+        {error && <p className="text-xs text-primary">{error}</p>}
+        {done && <p className="text-xs text-emerald-400">{done}</p>}
+
+        <button
+          type="submit"
+          disabled={saving || !selectedUser || !targetAdmin}
+          className="button-primary w-full h-11 rounded-lg font-semibold text-sm mt-1 flex items-center justify-center gap-2 disabled:opacity-60"
+        >
+          <ArrowLeftRight className="size-4" />
+          {saving ? "Passando..." : "Passar usuário"}
+        </button>
       </form>
     </ModalShell>
   )
