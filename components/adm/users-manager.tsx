@@ -109,6 +109,7 @@ export function UsersManager({ adminId, readOnly = false }: { adminId: string; r
   const [vipTarget, setVipTarget] = useState<AppUser | null>(null)
   const [trialTarget, setTrialTarget] = useState<AppUser | null>(null)
   const [showTransfer, setShowTransfer] = useState(false)
+  const [transferUserId, setTransferUserId] = useState<string>("")
 
   async function refresh() {
     const [{ data }, { data: txs }] = await Promise.all([listAppUsers(adminId), listTransactions(adminId)])
@@ -319,6 +320,10 @@ export function UsersManager({ adminId, readOnly = false }: { adminId: string; r
             onPassword={() => setPwTarget(u)}
             onVip={() => setVipTarget(u)}
             onTrial={() => setTrialTarget(u)}
+            onTransfer={() => {
+              setTransferUserId(u.id)
+              setShowTransfer(true)
+            }}
             onToggleBan={() => toggleBan(u)}
             onRemove={() => remove(u)}
           />
@@ -387,7 +392,11 @@ export function UsersManager({ adminId, readOnly = false }: { adminId: string; r
         <TransferModal
           adminId={adminId}
           users={users}
-          onClose={() => setShowTransfer(false)}
+          initialUserId={transferUserId}
+          onClose={() => {
+            setShowTransfer(false)
+            setTransferUserId("")
+          }}
           onDone={refresh}
         />
       )}
@@ -405,6 +414,7 @@ function UserCard({
   onPassword,
   onVip,
   onTrial,
+  onTransfer,
   onToggleBan,
   onRemove,
 }: {
@@ -417,140 +427,92 @@ function UserCard({
   onPassword: () => void
   onVip: () => void
   onTrial: () => void
+  onTransfer: () => void
   onToggleBan: () => void
   onRemove: () => void
 }) {
   const demo = parseDemoMeta(u)
   const isSubscriber = !!stats && stats.paidCount > 0
-  const monthsPaid = Math.min(12, stats?.paidCount ?? 0)
   const vip = computeVipStatus(u)
   const isTrial = vip.isVip && isTrialStatus(vip)
+
+  // Um unico selo de plano/acesso (prioridade), para reduzir poluicao visual.
+  const badge = demo
+    ? { label: "Demo", cls: "bg-amber-500/15 text-amber-400", Icon: Sparkles }
+    : isTrial
+      ? { label: `Teste ${vip.daysLeft}d`, cls: "bg-emerald-500/15 text-emerald-400", Icon: Gift }
+      : vip.isVip
+        ? { label: vip.lifetime ? "VIP ∞" : `VIP ${vip.daysLeft}d`, cls: "bg-primary/15 text-primary", Icon: Crown }
+        : isSubscriber
+          ? { label: "Assinante", cls: "bg-primary/15 text-primary", Icon: Crown }
+          : { label: "Sem plano", cls: "bg-white/5 text-muted-foreground", Icon: null }
 
   return (
     <div
       className={`rounded-2xl p-4 ${
-        demo
-          ? "bg-amber-500/[0.06] ring-1 ring-amber-500/40 shadow-[0_0_0_1px_rgba(245,158,11,0.15),0_8px_24px_-12px_rgba(245,158,11,0.45)]"
-          : "skeuo-card"
+        demo ? "bg-amber-500/[0.06] ring-1 ring-amber-500/40" : "skeuo-card"
       }`}
     >
-      {/* Cabecalho: avatar + nome + badges */}
-      <div className="flex items-start gap-3">
-        <div
-          className={`size-11 shrink-0 rounded-xl flex items-center justify-center font-display font-bold text-sm ${
-            demo
-              ? "bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/30"
-              : isSubscriber
-                ? "bg-primary/15 text-primary ring-1 ring-primary/30"
-                : "skeuo-icon-container text-muted-foreground"
-          }`}
-          aria-hidden
-        >
-          {initials(u.name)}
+      {/* Cabecalho: avatar + nome + selo */}
+      <div className="flex items-center gap-3">
+        <div className="relative shrink-0">
+          <div
+            className={`size-11 rounded-xl flex items-center justify-center font-display font-bold text-sm ${
+              demo
+                ? "bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/30"
+                : vip.isVip || isSubscriber
+                  ? "bg-primary/15 text-primary ring-1 ring-primary/30"
+                  : "skeuo-icon-container text-muted-foreground"
+            }`}
+            aria-hidden
+          >
+            {initials(u.name)}
+          </div>
+          <span
+            className={`absolute -bottom-0.5 -right-0.5 size-3 rounded-full ring-2 ring-card ${
+              u.status === "active" ? "bg-emerald-400" : "bg-primary"
+            }`}
+            title={u.status === "active" ? "Ativo" : "Banido"}
+            aria-label={u.status === "active" ? "Ativo" : "Banido"}
+          />
         </div>
 
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <p className="text-sm font-semibold truncate">{u.name}</p>
-            {demo && (
-              <span className="px-2 h-5 inline-flex items-center gap-1 rounded-full text-[0.55rem] font-mono uppercase tracking-wider bg-amber-500/20 text-amber-400">
-                <Sparkles className="size-2.5" />
-                Demo
-              </span>
-            )}
-            <span
-              className={`px-2 h-5 inline-flex items-center rounded-full text-[0.55rem] font-mono uppercase tracking-wider ${
-                u.status === "active" ? "bg-emerald-500/15 text-emerald-400" : "bg-primary/15 text-primary"
-              }`}
-            >
-              {u.status === "active" ? "Ativo" : "Banido"}
-            </span>
-            {!demo && vip.isVip && isTrial && (
-              <span className="px-2 h-5 inline-flex items-center gap-1 rounded-full text-[0.55rem] font-mono uppercase tracking-wider bg-emerald-500/20 text-emerald-400">
-                <Gift className="size-2.5" />
-                {`Teste · ${vip.daysLeft}d`}
-              </span>
-            )}
-            {!demo && vip.isVip && !isTrial && (
-              <span className="px-2 h-5 inline-flex items-center gap-1 rounded-full text-[0.55rem] font-mono uppercase tracking-wider bg-primary/20 text-primary">
-                <Crown className="size-2.5" />
-                {vip.lifetime ? "VIP vital��cio" : `VIP · ${vip.daysLeft}d`}
-              </span>
-            )}
-            {!demo &&
-              (isSubscriber ? (
-                <span className="px-2 h-5 inline-flex items-center gap-1 rounded-full text-[0.55rem] font-mono uppercase tracking-wider bg-primary/15 text-primary">
-                  <Crown className="size-2.5" />
-                  Assinante
-                </span>
-              ) : (
-                <span className="px-2 h-5 inline-flex items-center rounded-full text-[0.55rem] font-mono uppercase tracking-wider bg-white/5 text-muted-foreground">
-                  Sem plano
-                </span>
-              ))}
-            {!demo && u.source === "referral" && (
-              <span className="px-2 h-5 inline-flex items-center rounded-full text-[0.55rem] font-mono uppercase tracking-wider bg-white/5 text-muted-foreground">
-                Indicação
-              </span>
-            )}
-          </div>
+          <p className="text-sm font-semibold truncate leading-tight">{u.name}</p>
           <p className="text-xs text-muted-foreground truncate mt-0.5">{u.email}</p>
-          {!demo && u.atlax_email && (
-            <p className="text-xs text-muted-foreground/70 truncate mt-0.5">{u.atlax_email}</p>
-          )}
-          {!demo && u.phone && <p className="text-xs text-muted-foreground/70 mt-0.5">{u.phone}</p>}
         </div>
+
+        <span
+          className={`px-2 h-6 shrink-0 inline-flex items-center gap-1 rounded-full text-[0.6rem] font-mono uppercase tracking-wider ${badge.cls}`}
+        >
+          {badge.Icon && <badge.Icon className="size-3" />}
+          {badge.label}
+        </span>
       </div>
 
-      {/* Metricas em grade */}
-      <div className="grid grid-cols-2 gap-2 mt-3">
-        <MetricBox
-          icon={Wallet}
-          label="Saldo"
-          value={demo ? `R$ ${formatBRL(demo.balance)}` : isSubscriber ? `R$ ${formatBRL(stats!.totalPaid)}` : "—"}
-          hint={demo ? undefined : isSubscriber ? "total pago" : undefined}
-          tone={demo ? "amber" : "default"}
-        />
+      {/* Faixa de metricas compacta */}
+      <div className="mt-3 grid grid-cols-3 rounded-xl skeuo-card-inset overflow-hidden divide-x divide-border/60">
         {demo ? (
-          <MetricBox icon={Gauge} label="RTP" value={`${demo.rtp}%`} hint="ganhos" tone="emerald" />
+          <>
+            <MiniStat label="Saldo" value={`R$ ${formatBRL(demo.balance)}`} />
+            <MiniStat label="RTP" value={`${demo.rtp}%`} accent="emerald" />
+            <MiniStat label="Acesso" value={formatWhen(u.last_login_at)} />
+          </>
         ) : (
-          <MetricBox
-            icon={CreditCard}
-            label="Pagamentos"
-            value={String(stats?.paidCount ?? 0)}
-            hint={stats?.lastPlanName || undefined}
-          />
+          <>
+            <MiniStat label="Saldo" value={isSubscriber ? `R$ ${formatBRL(stats!.totalPaid)}` : "—"} />
+            <MiniStat label="Pagtos" value={String(stats?.paidCount ?? 0)} />
+            <MiniStat label="Acesso" value={formatWhen(u.last_login_at)} />
+          </>
         )}
-        <MetricBox icon={Clock} label="Último login" value={formatWhen(u.last_login_at)} hint="acesso" />
-        <MetricBox
-          icon={Clock}
-          label={isSubscriber ? "Último pgto." : "Cadastro"}
-          value={formatWhen(isSubscriber ? stats!.lastPaidAt : u.created_at)}
-        />
       </div>
 
-      {/* Progresso mensal (assinatura recorrente) */}
-      {!demo && isSubscriber && (
-        <div className="mt-3">
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[0.65rem] font-mono uppercase tracking-wider text-muted-foreground">
-              Recorrência
-            </span>
-            <span className="text-[0.7rem] font-mono text-foreground/90 tabular-nums">{monthsPaid}/12</span>
-          </div>
-          <div className="h-2 rounded-full bg-white/5 overflow-hidden">
-            <div
-              className="h-full rounded-full bg-primary transition-all"
-              style={{ width: `${(monthsPaid / 12) * 100}%` }}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Senha */}
-      <div className="flex items-center gap-2 mt-3">
-        <span className="text-[0.65rem] font-mono text-muted-foreground">Senha:</span>
-        <code className="text-[0.7rem] font-mono text-foreground/90">{revealed ? u.password || "—" : "••••••••"}</code>
+      {/* Senha (linha discreta) */}
+      <div className="flex items-center gap-2 mt-2.5 px-0.5">
+        <KeyRound className="size-3 text-muted-foreground/70 shrink-0" />
+        <code className="text-[0.7rem] font-mono text-muted-foreground flex-1 truncate">
+          {revealed ? u.password || "—" : "••••••••"}
+        </code>
         <button
           onClick={onToggleReveal}
           className="text-muted-foreground hover:text-foreground transition-colors"
@@ -587,48 +549,69 @@ function UserCard({
         </div>
       )}
 
+      {/* Barra de acoes (icones) */}
       {!readOnly && (
-        <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border">
-          <button
-            onClick={onEdit}
-            className="flex-1 h-9 rounded-lg clay-input flex items-center justify-center gap-1.5 text-xs text-foreground/90 hover:text-foreground"
-          >
-            <Pencil className="size-3.5" />
-            Editar
-          </button>
-          <button
-            onClick={onPassword}
-            className="flex-1 h-9 rounded-lg clay-input flex items-center justify-center gap-1.5 text-xs text-foreground/90 hover:text-foreground"
-          >
-            <KeyRound className="size-3.5" />
-            Senha
-          </button>
-          <button
+        <div className="flex items-center gap-1.5 mt-2.5 pt-2.5 border-t border-border">
+          <IconAction icon={Pencil} label="Editar" onClick={onEdit} />
+          <IconAction icon={KeyRound} label="Senha" onClick={onPassword} />
+          {!demo && <IconAction icon={ArrowLeftRight} label="Passar de base" onClick={onTransfer} />}
+          <IconAction
+            icon={u.status === "active" ? Ban : CheckCircle2}
+            label={u.status === "active" ? "Banir" : "Reativar"}
             onClick={onToggleBan}
-            className="flex-1 h-9 rounded-lg clay-input flex items-center justify-center gap-1.5 text-xs text-foreground/90 hover:text-foreground"
-          >
-            {u.status === "active" ? (
-              <>
-                <Ban className="size-3.5" />
-                Banir
-              </>
-            ) : (
-              <>
-                <CheckCircle2 className="size-3.5" />
-                Reativar
-              </>
-            )}
-          </button>
-          <button
-            onClick={onRemove}
-            className="h-9 w-9 rounded-lg clay-input flex items-center justify-center text-primary hover:text-primary/80"
-            aria-label="Excluir usuário"
-          >
-            <Trash2 className="size-3.5" />
-          </button>
+          />
+          <IconAction icon={Trash2} label="Excluir" onClick={onRemove} danger />
         </div>
       )}
     </div>
+  )
+}
+
+function MiniStat({
+  label,
+  value,
+  accent = "default",
+}: {
+  label: string
+  value: string
+  accent?: "default" | "emerald"
+}) {
+  return (
+    <div className="px-2.5 py-2 min-w-0 text-center">
+      <p className="text-[0.55rem] font-mono uppercase tracking-wider text-muted-foreground truncate">{label}</p>
+      <p
+        className={`text-sm font-bold tabular-nums truncate leading-tight mt-0.5 ${
+          accent === "emerald" ? "text-emerald-400" : "text-foreground"
+        }`}
+      >
+        {value}
+      </p>
+    </div>
+  )
+}
+
+function IconAction({
+  icon: Icon,
+  label,
+  onClick,
+  danger = false,
+}: {
+  icon: typeof Pencil
+  label: string
+  onClick: () => void
+  danger?: boolean
+}) {
+  return (
+    <button
+      onClick={onClick}
+      title={label}
+      aria-label={label}
+      className={`flex-1 h-9 rounded-lg clay-input flex items-center justify-center transition-colors ${
+        danger ? "text-primary hover:text-primary/80" : "text-foreground/80 hover:text-foreground"
+      }`}
+    >
+      <Icon className="size-4" />
+    </button>
   )
 }
 
@@ -1327,11 +1310,13 @@ const TRANSFER_PASSWORD = "4545"
 function TransferModal({
   adminId,
   users,
+  initialUserId = "",
   onClose,
   onDone,
 }: {
   adminId: string
   users: AppUser[]
+  initialUserId?: string
   onClose: () => void
   onDone: () => void
 }) {
@@ -1341,7 +1326,7 @@ function TransferModal({
 
   const [admins, setAdmins] = useState<Admin[]>([])
   const [query, setQuery] = useState("")
-  const [selectedUser, setSelectedUser] = useState<string>("")
+  const [selectedUser, setSelectedUser] = useState<string>(initialUserId)
   const [targetAdmin, setTargetAdmin] = useState<string>("")
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
