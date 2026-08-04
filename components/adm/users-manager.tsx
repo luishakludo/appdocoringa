@@ -101,10 +101,10 @@ export function UsersManager({ adminId, readOnly = false }: { adminId: string; r
   const [showFilters, setShowFilters] = useState(false)
   const [typeFilter, setTypeFilter] = useState<UserType>("all")
   const [balanceRange, setBalanceRange] = useState<[number, number]>([BALANCE_MIN, BALANCE_MAX])
-  const [revealed, setRevealed] = useState<Record<string, boolean>>({})
   const [showCreate, setShowCreate] = useState(false)
   const [pwTarget, setPwTarget] = useState<AppUser | null>(null)
   const [editTarget, setEditTarget] = useState<AppUser | null>(null)
+  const [detailsTarget, setDetailsTarget] = useState<AppUser | null>(null)
   const [vipTarget, setVipTarget] = useState<AppUser | null>(null)
   const [trialTarget, setTrialTarget] = useState<AppUser | null>(null)
   const [showTransfer, setShowTransfer] = useState(false)
@@ -312,13 +312,10 @@ export function UsersManager({ adminId, readOnly = false }: { adminId: string; r
             key={u.id}
             user={u}
             stats={stats?.get(u) ?? null}
-            revealed={!!revealed[u.id]}
-            onToggleReveal={() => setRevealed((r) => ({ ...r, [u.id]: !r[u.id] }))}
             readOnly={readOnly}
             onEdit={() => setEditTarget(u)}
             onPassword={() => setPwTarget(u)}
-            onVip={() => setVipTarget(u)}
-            onTrial={() => setTrialTarget(u)}
+            onDetails={() => setDetailsTarget(u)}
             onTransfer={() => {
               setTransferUserId(u.id)
               setShowTransfer(true)
@@ -406,26 +403,20 @@ export function UsersManager({ adminId, readOnly = false }: { adminId: string; r
 function UserCard({
   user: u,
   stats,
-  revealed,
-  onToggleReveal,
   readOnly,
   onEdit,
   onPassword,
-  onVip,
-  onTrial,
+  onDetails,
   onTransfer,
   onToggleBan,
   onRemove,
 }: {
   user: AppUser
   stats: UserPaymentStats | null
-  revealed: boolean
-  onToggleReveal: () => void
   readOnly: boolean
   onEdit: () => void
   onPassword: () => void
-  onVip: () => void
-  onTrial: () => void
+  onDetails: () => void
   onTransfer: () => void
   onToggleBan: () => void
   onRemove: () => void
@@ -489,67 +480,26 @@ function UserCard({
         </span>
       </div>
 
-      {/* Faixa de metricas compacta */}
-      <div className="mt-3 grid grid-cols-3 rounded-xl skeuo-card-inset overflow-hidden divide-x divide-border/60">
-        {demo ? (
-          <>
-            <MiniStat label="Saldo" value={`R$ ${formatBRL(demo.balance)}`} />
-            <MiniStat label="RTP" value={`${demo.rtp}%`} accent="emerald" />
-            <MiniStat label="Acesso" value={formatWhen(u.last_login_at)} />
-          </>
-        ) : (
-          <>
-            <MiniStat
-              label="Saldo"
-              value={u.atlax_balance != null ? `R$ ${formatBRL(Number(u.atlax_balance))}` : "—"}
-            />
-            <MiniStat label="Pagos" value={String(stats?.paidCount ?? 0)} />
-            <MiniStat label="Acesso" value={formatWhen(u.last_login_at)} />
-          </>
-        )}
-      </div>
-
-      {/* Senha (linha discreta) */}
-      <div className="flex items-center gap-2 mt-2.5 px-0.5">
-        <KeyRound className="size-3 text-muted-foreground/70 shrink-0" />
-        <code className="text-[0.7rem] font-mono text-muted-foreground flex-1 truncate">
-          {revealed ? u.password || "—" : "••••••••"}
-        </code>
+      {/* Linha compacta: saldo em destaque + acesso ao popup de detalhes */}
+      <div className="mt-3 flex items-stretch gap-2">
+        <div className="flex-1 min-w-0 rounded-xl skeuo-card-inset px-3 py-2">
+          <p className="text-[0.55rem] font-mono uppercase tracking-wider text-muted-foreground">Saldo</p>
+          <p className="text-sm font-bold tabular-nums leading-tight mt-0.5 truncate">
+            {demo
+              ? `R$ ${formatBRL(demo.balance)}`
+              : u.atlax_balance != null
+                ? `R$ ${formatBRL(Number(u.atlax_balance))}`
+                : "—"}
+          </p>
+        </div>
         <button
-          onClick={onToggleReveal}
-          className="text-muted-foreground hover:text-foreground transition-colors"
-          aria-label={revealed ? "Ocultar senha" : "Mostrar senha"}
+          onClick={onDetails}
+          className="shrink-0 rounded-xl clay-input px-3 flex items-center gap-1.5 text-xs font-medium text-foreground/90 hover:text-foreground transition-colors"
         >
-          {revealed ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+          <SlidersHorizontal className="size-3.5" />
+          Detalhes
         </button>
       </div>
-
-      {!readOnly && !demo && (
-        <div className="grid grid-cols-2 gap-2 mt-3">
-          <button
-            onClick={onVip}
-            className={`h-9 rounded-lg flex items-center justify-center gap-1.5 text-xs font-medium transition-colors ${
-              vip.isVip && !isTrial
-                ? "bg-primary/15 text-primary ring-1 ring-primary/30 hover:bg-primary/20"
-                : "clay-input text-foreground/90 hover:text-foreground"
-            }`}
-          >
-            <Crown className="size-3.5" />
-            {vip.isVip && !isTrial ? "Gerenciar VIP" : "Dar VIP"}
-          </button>
-          <button
-            onClick={onTrial}
-            className={`h-9 rounded-lg flex items-center justify-center gap-1.5 text-xs font-medium transition-colors ${
-              isTrial
-                ? "bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/30 hover:bg-emerald-500/20"
-                : "clay-input text-foreground/90 hover:text-foreground"
-            }`}
-          >
-            <Gift className="size-3.5" />
-            {isTrial ? "Teste ativo" : "Teste grátis"}
-          </button>
-        </div>
-      )}
 
       {/* Barra de acoes (icones) */}
       {!readOnly && (
