@@ -28,7 +28,7 @@ import { Crown, Lock } from "lucide-react"
 import { AiOrb } from "@/components/ai-orb"
 import { useWinSound } from "@/lib/use-win-sound"
 import { getAtlaxSession, type AtlaxLocalTransaction } from "@/lib/atlax-session"
-import { getUserVipByEmail, type VipStatus } from "@/lib/adm"
+import { getUserVipByEmail, syncAppUserAtlaxBalance, type VipStatus } from "@/lib/adm"
 import { formatSymbol } from "@/lib/utils"
 import { getDemoSession, updateDemoSession, getDemoHistory, pushDemoHistory, type DemoSession } from "@/lib/demo-session"
 import {
@@ -250,6 +250,13 @@ export function TradingContent({ onGoVip }: { onGoVip?: () => void }) {
       const data = await r.json()
       if (data.credit !== undefined) {
         setBalance({ credit: data.credit, freebet: data.freebet, bonus: data.bonus })
+
+        // Mantém o saldo atual ligado ao login Atlax correto para o painel ADM.
+        const normalizedCredit = String(data.credit).replace(/\./g, "").replace(",", ".")
+        const creditValue = Number(normalizedCredit)
+        if (userLogin && Number.isFinite(creditValue)) {
+          void syncAppUserAtlaxBalance(userLogin, creditValue)
+        }
       }
     } catch {
       // ignora
@@ -449,7 +456,7 @@ export function TradingContent({ onGoVip }: { onGoVip?: () => void }) {
     loadBalance()
     const id = setInterval(loadBalance, autoActive ? 2000 : 10000)
     return () => clearInterval(id)
-  }, [token, autoActive, loadBalance])
+  }, [token, autoActive, userLogin, loadBalance])
 
   // Inicia a IA no servidor.
   async function startAi() {

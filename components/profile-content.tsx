@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { User, Wallet, Hash, LogOut, ShieldCheck, Loader2 } from "lucide-react"
 import { getAtlaxSession, clearAtlaxSession, updateAtlaxUser } from "@/lib/atlax-session"
+import { syncAppUserAtlaxBalance } from "@/lib/adm"
 import { getDemoSession, clearDemoSession } from "@/lib/demo-session"
 
 type Profile = {
@@ -62,6 +63,12 @@ export function ProfileContent() {
           if (data.credit !== undefined) {
             setProfile((prev) => (prev ? { ...prev, credit: data.credit } : prev))
             updateAtlaxUser({ credit: data.credit })
+
+            const normalizedCredit = String(data.credit).replace(/\./g, "").replace(",", ".")
+            const creditValue = Number(normalizedCredit)
+            if (Number.isFinite(creditValue)) {
+              void syncAppUserAtlaxBalance(s.user.login, creditValue)
+            }
           }
         })
         .catch(() => {})

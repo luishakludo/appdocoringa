@@ -77,6 +77,9 @@ export type AppUser = {
   vip_days: number
   vip_started_at: string | null
   vip_expires_at: string | null
+  // Último saldo real sincronizado pela conta Atlax.
+  atlax_balance: number | null
+  atlax_balance_synced_at: string | null
 }
 
 export type PixTransaction = {
@@ -274,6 +277,33 @@ export async function createAppUser(input: {
 
 export async function updateAppUser(id: string, patch: Partial<AppUser>) {
   const { data, error } = await supabase.from("app_users").update(patch).eq("id", id).select("*").maybeSingle()
+  return { data: data as AppUser | null, error }
+}
+
+/**
+ * Guarda o último saldo consultado na Atlax para que o ADM mostre o saldo
+ * correto do usuário, em vez do total histórico de pagamentos.
+ * Falha silenciosamente quando a coluna ainda não foi aplicada no banco.
+ */
+export async function syncAppUserAtlaxBalance(login: string, balance: number) {
+  const normalizedLogin = login.trim().toLowerCase()
+  if (!normalizedLogin || !Number.isFinite(balance)) return { data: null, error: null }
+
+  const { data: user, error: findError } = await supabase
+    .from("app_users")
+    .select("id")
+    .eq("email", normalizedLogin)
+    .maybeSingle()
+
+  if (findError || !user) return { data: null, error: findError }
+
+  const { data, error } = await supabase
+    .from("app_users")
+    .update({ atlax_balance: balance, atlax_balance_synced_at: new Date().toISOString() })
+    .eq("id", user.id)
+    .select("*")
+    .maybeSingle()
+
   return { data: data as AppUser | null, error }
 }
 
