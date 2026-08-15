@@ -316,6 +316,8 @@ export function UsersManager({ adminId, readOnly = false }: { adminId: string; r
             onEdit={() => setEditTarget(u)}
             onPassword={() => setPwTarget(u)}
             onDetails={() => setDetailsTarget(u)}
+            onVip={() => setVipTarget(u)}
+            onTrial={() => setTrialTarget(u)}
             onTransfer={() => {
               setTransferUserId(u.id)
               setShowTransfer(true)
@@ -407,6 +409,8 @@ function UserCard({
   onEdit,
   onPassword,
   onDetails,
+  onVip,
+  onTrial,
   onTransfer,
   onToggleBan,
   onRemove,
@@ -417,6 +421,8 @@ function UserCard({
   onEdit: () => void
   onPassword: () => void
   onDetails: () => void
+  onVip: () => void
+  onTrial: () => void
   onTransfer: () => void
   onToggleBan: () => void
   onRemove: () => void
@@ -506,6 +512,8 @@ function UserCard({
         <div className="flex items-center gap-1.5 mt-2.5 pt-2.5 border-t border-border">
           <IconAction icon={Pencil} label="Editar" onClick={onEdit} />
           <IconAction icon={KeyRound} label="Senha" onClick={onPassword} />
+          {!demo && <IconAction icon={Crown} label="VIP" onClick={onVip} />}
+          {!demo && <IconAction icon={Gift} label="Teste grátis" onClick={onTrial} />}
           {!demo && <IconAction icon={ArrowLeftRight} label="Passar de base" onClick={onTransfer} />}
           <IconAction
             icon={u.status === "active" ? Ban : CheckCircle2}
